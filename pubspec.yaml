@@ -1,0 +1,34 @@
+name: bite
+description: "Bite — a swipe-based news reader. Stage-1 frontend mockup."
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_card_swiper: ^7.2.0
+  cupertino_icons: ^1.0.8
+  liquid_glass_renderer: ^0.2.0-dev.4
+  animations: ^2.2.0
+  flutter_dotenv: ^6.0.1
+  http: ^1.6.0
+  webview_flutter: ^4.14.0
+  share_plus: ^13.2.0
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Variable.ttf

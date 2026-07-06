@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: #E7E4DF; -webkit-font-smoothing: antialiased; }
+  .bite-scroll::-webkit-scrollbar { display: none; }
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="--accent:#F1543B; min-height:100vh; padding:72px 84px 120px; background:#E7E4DF; font-family:'Instrument Sans',system-ui,sans-serif;">
+
+  <div style="max-width:340px; margin-bottom:46px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <div style="width:34px; height:34px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(241,84,59,0.35);">
+        <span style="font-family:Newsreader,serif; font-weight:600; font-size:22px; color:#fff; line-height:1;">B</span>
+      </div>
+      <span style="font-family:Newsreader,serif; font-weight:600; font-size:30px; color:#1A1714; letter-spacing:-0.5px;">Bite</span>
+    </div>
+    <div style="font-size:14px; line-height:1.5; color:#6E6862;">News, one card at a time. Drag the top card on <b style="color:#1A1714;">Swipe Feed</b> — left to dismiss, right to save, up to read. The tab bar now floats, and <b style="color:#1A1714;">Saved</b> filters live.</div>
+  </div>
+
+  <div style="display:flex; gap:60px; align-items:flex-start;">
+
+    <!-- ═══════════ SCREEN 1 · SWIPE FEED ═══════════ -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:18px;">
+      <div style="font-family:'Instrument Sans'; font-size:13px; font-weight:600; color:#1A1714; letter-spacing:0.2px;"><span style="color:var(--accent);">01</span> &nbsp;Swipe Feed</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="height:100%; display:flex; flex-direction:column; background:#FCFBF9; position:relative; overflow:hidden;">
+
+          <!-- top bar -->
+          <div style="padding:56px 20px 12px; display:flex; align-items:center; justify-content:space-between; z-index:6;">
+            <div style="display:flex; align-items:baseline; gap:1px;">
+              <span style="font-family:Newsreader,serif; font-weight:600; font-size:27px; color:#1A1714; letter-spacing:-0.6px;">Bite</span>
+              <span style="width:6px; height:6px; border-radius:50%; background:var(--accent); display:inline-block; margin-left:2px;"></span>
+            </div>
+            <div style="width:42px; height:42px; border-radius:50%; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(26,23,20,0.08);">
+              <div style="position:absolute; inset:0; background:rgba(255,255,255,0.55); backdrop-filter:blur(14px) saturate(180%); -webkit-backdrop-filter:blur(14px) saturate(180%);"></div>
+              <div style="position:absolute; inset:0; border-radius:50%; border:0.5px solid rgba(26,23,20,0.08); box-shadow:inset 1px 1px 1px rgba(255,255,255,0.8);"></div>
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" style="position:relative;"><path d="M4 8h9M18 8h2M4 16h4M13 16h7" stroke="#1A1714" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="8" r="2.5" fill="#FCFBF9" stroke="#1A1714" stroke-width="1.8"/><circle cx="10" cy="16" r="2.5" fill="#FCFBF9" stroke="#1A1714" stroke-width="1.8"/></svg>
+            </div>
+          </div>
+
+          <!-- card stack -->
+          <div style="flex:1; position:relative; overflow:hidden;">
+            <!-- back card 2 -->
+            <div style="position:absolute; top:8px; left:16px; right:16px; bottom:96px; border-radius:28px; background:#fff; transform:translateY(34px) scale(0.9); transform-origin:50% 0%; box-shadow:0 10px 24px rgba(26,23,20,0.08); z-index:1;"></div>
+            <!-- back card 1 (peek) -->
+            <div style="position:absolute; top:8px; left:16px; right:16px; bottom:96px; border-radius:28px; background:#fff; overflow:hidden; transform:translateY(17px) scale(0.95); transform-origin:50% 0%; box-shadow:0 14px 30px rgba(26,23,20,0.10); z-index:2;">
+              <div style="height:58%; background:{{ next.tone }};"></div>
+            </div>
+            <!-- TOP CARD (draggable) -->
+            <div style="{{ topStyle }}" onPointerDown="{{ onDown }}" onPointerMove="{{ onMove }}" onPointerUp="{{ onUp }}" onPointerCancel="{{ onUp }}">
+              <div style="height:57%; position:relative; background:{{ top.tone }};">
+                <div style="position:absolute; top:16px; left:16px; padding:6px 11px; border-radius:8px; background:var(--accent); font-size:11px; font-weight:700; letter-spacing:0.6px; color:#fff; text-transform:uppercase;">{{ top.category }}</div>
+                <div style="position:absolute; bottom:12px; right:14px; font-family:ui-monospace,'SF Mono',monospace; font-size:9px; letter-spacing:0.4px; color:rgba(255,255,255,0.7);">{{ top.credit }}</div>
+                <!-- swipe cues -->
+                <div style="position:absolute; top:18px; left:18px; padding:8px 14px; border:3px solid #12A66B; border-radius:12px; transform:rotate(-13deg); opacity:{{ saveOp }};">
+                  <span style="font-size:19px; font-weight:800; letter-spacing:1px; color:#12A66B;">SAVE</span>
+                </div>
+                <div style="position:absolute; top:18px; right:18px; padding:8px 14px; border:3px solid #E23B2E; border-radius:12px; transform:rotate(13deg); opacity:{{ dismissOp }};">
+                  <span style="font-size:19px; font-weight:800; letter-spacing:1px; color:#E23B2E;">DISMISS</span>
+                </div>
+                <div style="position:absolute; top:14px; left:50%; transform:translateX(-50%); padding:7px 16px; border-radius:999px; background:rgba(255,255,255,0.9); opacity:{{ readOp }}; display:flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                  <span style="font-size:14px; font-weight:700; letter-spacing:0.4px; color:var(--accent);">READ</span>
+                  <span style="font-size:15px; color:var(--accent);">&#8593;</span>
+                </div>
+              </div>
+              <div style="flex:1; padding:20px 22px 18px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="font-family:Newsreader,serif; font-weight:500; font-size:26px; line-height:1.14; color:#1A1714; letter-spacing:-0.4px;">{{ top.headline }}</div>
+                <div style="display:flex; align-items:center; gap:9px; margin-top:16px;">
+                  <div style="width:22px; height:22px; border-radius:6px; background:#1A1714; display:flex; align-items:center; justify-content:center; font-family:Newsreader,serif; font-weight:600; font-size:13px; color:#fff;">{{ top.logo }}</div>
+                  <span style="font-size:13px; font-weight:600; color:#1A1714;">{{ top.source }}</span>
+                  <span style="width:3px; height:3px; border-radius:50%; background:#C4BEB6;"></span>
+                  <span style="font-size:13px; color:#9C958D;">{{ top.time }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- floating glass tab bar · Feed active -->
+          <div style="position:absolute; left:0; right:0; bottom:24px; display:flex; justify-content:center; z-index:20; pointer-events:none;">
+            <div style="display:flex; align-items:center; gap:2px; padding:7px; border-radius:30px; pointer-events:auto; background:rgba(252,251,249,0.72); backdrop-filter:blur(26px) saturate(180%); -webkit-backdrop-filter:blur(26px) saturate(180%); box-shadow:0 16px 40px rgba(26,23,20,0.2), inset 0 0.5px 0 rgba(255,255,255,0.9); border:0.5px solid rgba(26,23,20,0.07);">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px; border-radius:22px; background:color-mix(in srgb, var(--accent) 12%, transparent);">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><rect x="7" y="3.5" width="10" height="12" rx="2" fill="var(--accent)" opacity="0.22"/><rect x="4.5" y="6.5" width="15" height="13" rx="3" fill="none" stroke="var(--accent)" stroke-width="1.9"/></svg>
+                <span style="font-size:10.5px; font-weight:600; color:var(--accent);">Feed</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px;">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M7 3.5h10a1.5 1.5 0 011.5 1.5v15l-6.5-4-6.5 4V5A1.5 1.5 0 017 3.5z" fill="none" stroke="#B0A99F" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                <span style="font-size:10.5px; font-weight:500; color:#A7A099;">Saved</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px;">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" fill="none" stroke="#B0A99F" stroke-width="1.8"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z" fill="#B0A99F"/></svg>
+                <span style="font-size:10.5px; font-weight:500; color:#A7A099;">Discover</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px;">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8.5" r="3.7" fill="none" stroke="#B0A99F" stroke-width="1.8"/><path d="M5 19.5c1.2-3.6 4-5 7-5s5.8 1.4 7 5" fill="none" stroke="#B0A99F" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span style="font-size:10.5px; font-weight:500; color:#A7A099;">Profile</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ═══════════ SCREEN 2 · ARTICLE READER ═══════════ -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:18px;">
+      <div style="font-family:'Instrument Sans'; font-size:13px; font-weight:600; color:#1A1714; letter-spacing:0.2px;"><span style="color:var(--accent);">02</span> &nbsp;Article Reader</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="height:100%; display:flex; flex-direction:column; background:#FCFBF9; position:relative; overflow:hidden;">
+
+          <div class="bite-scroll" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+            <!-- hero -->
+            <div style="height:340px; position:relative; background:linear-gradient(140deg,#12294D,#2B4E86 60%,#6C8FC7);">
+              <div style="position:absolute; top:56px; left:16px; width:40px; height:40px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+                <div style="position:absolute; inset:0; background:rgba(20,20,25,0.28); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:0.5px solid rgba(255,255,255,0.2);"></div>
+                <svg width="11" height="18" viewBox="0 0 12 20" fill="none" style="position:relative;"><path d="M10 2L2 10l8 8" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div style="position:absolute; bottom:0; left:0; right:0; height:120px; background:linear-gradient(to bottom, transparent, rgba(252,251,249,1));"></div>
+              <div style="position:absolute; bottom:14px; right:14px; font-family:ui-monospace,'SF Mono',monospace; font-size:9px; color:rgba(255,255,255,0.55);">reuters / delta survey</div>
+            </div>
+
+            <div style="padding:0 24px 30px; margin-top:-38px; position:relative;">
+              <div style="display:inline-block; padding:6px 12px; border-radius:8px; background:var(--accent); font-size:11px; font-weight:700; letter-spacing:0.6px; color:#fff; text-transform:uppercase; margin-bottom:16px;">World</div>
+              <h1 style="font-family:Newsreader,serif; font-weight:500; font-size:33px; line-height:1.1; letter-spacing:-0.6px; color:#1A1714; margin:0 0 18px;">Coastal cities race to redraw their maps as the water keeps rising</h1>
+
+              <div style="display:flex; align-items:center; gap:11px; padding-bottom:18px; border-bottom:0.5px solid rgba(26,23,20,0.1);">
+                <div style="width:34px; height:34px; border-radius:9px; background:#1A1714; display:flex; align-items:center; justify-content:center; font-family:Newsreader,serif; font-weight:600; font-size:16px; color:#fff;">A</div>
+                <div style="flex:1;">
+                  <div style="font-size:13.5px; font-weight:600; color:#1A1714;">Maya Okonkwo · <span style="color:#8A837C; font-weight:500;">Atlas</span></div>
+                  <div style="font-size:12px; color:#9C958D; margin-top:2px;">Jul 4, 2026 &nbsp;·&nbsp; 6 min read</div>
+                </div>
+              </div>
+
+              <div style="font-family:Newsreader,serif; font-size:18px; line-height:1.62; color:#2A2621; margin-top:20px;">
+                <p style="margin:0 0 16px;">The maps that governed these coastlines for a century are quietly being retired. In three of the largest delta cities, planners have begun issuing revised elevation charts every quarter rather than every decade — an admission that the ground beneath millions of people is no longer a fixed thing.</p>
+                <p style="margin:0 0 16px; font-family:Newsreader,serif; font-style:italic; font-size:20px; line-height:1.45; color:#1A1714; padding-left:16px; border-left:3px solid var(--accent);">"We stopped designing for the storm we remember, and started designing for the one we can't yet see."</p>
+                <p style="margin:0 0 16px;">What unsettles engineers is not any single number but the pace of revision. Seawalls approved five years ago are being re-rated before their concrete has fully cured, and the insurance maps that lag behind them are already a season out of date.</p>
+                <p style="margin:0;">For residents, the changes arrive as small municipal letters — a new flood tier, a shifted setback line — each one a quiet renegotiation of where it is safe to keep a life.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- glass action bar -->
+          <div style="flex-shrink:0; padding:12px 22px 30px; display:flex; align-items:center; gap:12px; background:rgba(252,251,249,0.72); backdrop-filter:blur(22px) saturate(180%); -webkit-backdrop-filter:blur(22px) saturate(180%); border-top:0.5px solid rgba(26,23,20,0.08);">
+            <button style="flex:1; height:50px; border:none; border-radius:15px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; gap:8px; font-family:'Instrument Sans'; font-size:15px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(241,84,59,0.3);">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M7 3.5h10a1.5 1.5 0 011.5 1.5v15l-6.5-4-6.5 4V5A1.5 1.5 0 017 3.5z" fill="#fff"/></svg>
+              Save
+            </button>
+            <button style="width:50px; height:50px; border:0.5px solid rgba(26,23,20,0.1); border-radius:15px; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 3.5v11M12 3.5l-3.5 3.5M12 3.5l3.5 3.5" stroke="#1A1714" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 11H6a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2v-6a2 2 0 00-2-2h-.5" stroke="#1A1714" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </button>
+            <button style="width:50px; height:50px; border:0.5px solid rgba(26,23,20,0.1); border-radius:15px; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="7" y="4" width="9" height="11" rx="1.6" fill="var(--accent)" opacity="0.22"/><rect x="4.5" y="7" width="14" height="12" rx="2.6" fill="none" stroke="#1A1714" stroke-width="1.8"/></svg>
+            </button>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ═══════════ SCREEN 3 · SAVED ARTICLES ═══════════ -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:18px;">
+      <div style="font-family:'Instrument Sans'; font-size:13px; font-weight:600; color:#1A1714; letter-spacing:0.2px;"><span style="color:var(--accent);">03</span> &nbsp;Saved · live filters</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="height:100%; display:flex; flex-direction:column; background:#FCFBF9; position:relative; overflow:hidden;">
+
+          <!-- header -->
+          <div style="padding:54px 20px 4px; flex-shrink:0;">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:13px;">
+              <div>
+                <h1 style="font-family:Newsreader,serif; font-weight:600; font-size:34px; letter-spacing:-0.6px; color:#1A1714; margin:0; line-height:1;">Saved</h1>
+                <div style="font-size:13px; color:#9C958D; margin-top:6px;"><span style="color:var(--accent); font-weight:600;">{{ savedCount }}</span> stories &nbsp;·&nbsp; {{ unreadCount }} unread</div>
+              </div>
+              <div style="width:42px; height:42px; border-radius:50%; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(26,23,20,0.08);">
+                <div style="position:absolute; inset:0; background:rgba(255,255,255,0.55); backdrop-filter:blur(14px) saturate(180%); -webkit-backdrop-filter:blur(14px) saturate(180%);"></div>
+                <div style="position:absolute; inset:0; border-radius:50%; border:0.5px solid rgba(26,23,20,0.08); box-shadow:inset 1px 1px 1px rgba(255,255,255,0.8);"></div>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="position:relative;"><path d="M4 7h9M4 12h7M4 17h5" stroke="#1A1714" stroke-width="1.8" stroke-linecap="round"/><path d="M16 15l2.5 2.5L21 15M18.5 17.2V6" stroke="#1A1714" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+            </div>
+            <!-- search -->
+            <div style="display:flex; align-items:center; gap:9px; height:42px; padding:0 14px; border-radius:13px; background:rgba(120,113,105,0.09);">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="#9C958D" stroke-width="1.9"/><path d="M15.5 15.5L20 20" stroke="#9C958D" stroke-width="1.9" stroke-linecap="round"/></svg>
+              <span style="font-size:15px; color:#9C958D;">Search saved stories</span>
+            </div>
+          </div>
+
+          <!-- live filter row -->
+          <div class="bite-scroll" style="flex-shrink:0; display:flex; gap:8px; overflow-x:auto; padding:12px 20px 4px;">
+            <sc-for list="{{ savedFilters }}" as="f" hint-placeholder-count="6">
+              <div style="{{ f.style }}" onClick="{{ f.onClick }}"><span>{{ f.name }}</span><span style="{{ f.badgeStyle }}">{{ f.count }}</span></div>
+            </sc-for>
+          </div>
+
+          <!-- list -->
+          <div class="bite-scroll" style="flex:1; overflow-y:auto; padding:10px 16px 104px;">
+
+            <sc-if value="{{ featured }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; align-items:center; gap:9px; margin:6px 2px 11px;">
+                <span style="font-size:11px; font-weight:700; letter-spacing:1.2px; color:var(--accent); text-transform:uppercase;">Continue reading</span>
+                <span style="flex:1; height:1px; background:rgba(26,23,20,0.08);"></span>
+              </div>
+              <div style="border-radius:22px; overflow:hidden; background:#fff; border:0.5px solid rgba(26,23,20,0.07); box-shadow:0 10px 26px rgba(26,23,20,0.11); margin-bottom:24px;">
+                <div style="height:134px; position:relative; background:{{ featured.tone }};">
+                  <div style="position:absolute; top:13px; left:13px; padding:6px 11px; border-radius:8px; background:var(--accent); font-size:10.5px; font-weight:700; letter-spacing:0.5px; color:#fff; text-transform:uppercase;">{{ featured.category }}</div>
+                  <div style="position:absolute; top:11px; right:12px; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.92); display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(0,0,0,0.2);">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                </div>
+                <div style="padding:15px 17px 17px;">
+                  <div style="font-family:Newsreader,serif; font-weight:500; font-size:20px; line-height:1.18; letter-spacing:-0.3px; color:#1A1714;">{{ featured.headline }}</div>
+                  <div style="font-size:12.5px; color:#9C958D; margin-top:9px;">{{ featured.meta }}</div>
+                  <div style="height:5px; border-radius:999px; background:rgba(26,23,20,0.09); margin-top:14px; overflow:hidden;"><div style="{{ featured.progressStyle }}"></div></div>
+                  <div style="font-size:12px; font-weight:600; color:var(--accent); margin-top:9px;">{{ featured.progressLabel }}</div>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="display:flex; align-items:center; gap:9px; margin:0 2px 12px;">
+              <span style="font-size:11px; font-weight:700; letter-spacing:1.2px; color:#9C958D; text-transform:uppercase;">{{ listLabel }}</span>
+              <span style="flex:1; height:1px; background:rgba(26,23,20,0.08);"></span>
+            </div>
+
+            <sc-for list="{{ savedList }}" as="it" hint-placeholder-count="4">
+              <div style="position:relative; margin-bottom:11px;">
+                <div style="position:absolute; inset:0; border-radius:18px; overflow:hidden; background:#E23B2E; display:flex; align-items:center; justify-content:flex-end; padding-right:22px;">
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 6.5h14M9 6.5V5a1.5 1.5 0 011.5-1.5h3A1.5 1.5 0 0115 5v1.5M7 6.5l1 13a1.5 1.5 0 001.5 1.4h5a1.5 1.5 0 001.5-1.4l1-13" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span style="font-size:11px; font-weight:600; color:#fff;">Remove</span>
+                  </div>
+                </div>
+                <div style="{{ it.cardStyle }}">
+                  <div style="{{ it.thumbStyle }}"></div>
+                  <div style="flex:1; min-width:0;">
+                    <span style="font-size:10px; font-weight:700; letter-spacing:0.5px; color:var(--accent); text-transform:uppercase;">{{ it.category }}</span>
+                    <div style="font-family:Newsreader,serif; font-weight:500; font-size:16px; line-height:1.2; color:#1A1714; margin-top:5px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ it.headline }}</div>
+                    <div style="font-size:12px; color:#9C958D; margin-top:6px;">{{ it.meta }}</div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="text-align:center; padding:30px 20px; color:#B0A99F; font-size:14px;">No saved stories in this topic yet.</div>
+            </sc-if>
+          </div>
+
+          <!-- floating glass tab bar · Saved active -->
+          <div style="position:absolute; left:0; right:0; bottom:24px; display:flex; justify-content:center; z-index:20; pointer-events:none;">
+            <div style="display:flex; align-items:center; gap:2px; padding:7px; border-radius:30px; pointer-events:auto; background:rgba(252,251,249,0.72); backdrop-filter:blur(26px) saturate(180%); -webkit-backdrop-filter:blur(26px) saturate(180%); box-shadow:0 16px 40px rgba(26,23,20,0.2), inset 0 0.5px 0 rgba(255,255,255,0.9); border:0.5px solid rgba(26,23,20,0.07);">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px;">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><rect x="4.5" y="6.5" width="15" height="13" rx="3" fill="none" stroke="#B0A99F" stroke-width="1.9"/></svg>
+                <span style="font-size:10.5px; font-weight:500; color:#A7A099;">Feed</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px; border-radius:22px; background:color-mix(in srgb, var(--accent) 12%, transparent);">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M7 3.5h10a1.5 1.5 0 011.5 1.5v15l-6.5-4-6.5 4V5A1.5 1.5 0 017 3.5z" fill="var(--accent)" stroke="var(--accent)" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                <span style="font-size:10.5px; font-weight:600; color:var(--accent);">Saved</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px;">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" fill="none" stroke="#B0A99F" stroke-width="1.8"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z" fill="#B0A99F"/></svg>
+                <span style="font-size:10.5px; font-weight:500; color:#A7A099;">Discover</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 17px;">
+                <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8.5" r="3.7" fill="none" stroke="#B0A99F" stroke-width="1.8"/><path d="M5 19.5c1.2-3.6 4-5 7-5s5.8 1.4 7 5" fill="none" stroke="#B0A99F" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span style="font-size:10.5px; font-weight:500; color:#A7A099;">Profile</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ═══════════ SCREEN 4 · ONBOARDING ═══════════ -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:18px;">
+      <div style="font-family:'Instrument Sans'; font-size:13px; font-weight:600; color:#1A1714; letter-spacing:0.2px;"><span style="color:var(--accent);">04</span> &nbsp;Onboarding</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="height:100%; display:flex; flex-direction:column; background:#FCFBF9; position:relative; overflow:hidden;">
+
+          <div class="bite-scroll" style="flex:1; overflow-y:auto; padding:70px 28px 20px;">
+            <div style="width:48px; height:48px; border-radius:13px; background:var(--accent); display:flex; align-items:center; justify-content:center; margin-bottom:26px; box-shadow:0 8px 20px rgba(241,84,59,0.32);">
+              <span style="font-family:Newsreader,serif; font-weight:600; font-size:29px; color:#fff; line-height:1;">B</span>
+            </div>
+            <h1 style="font-family:Newsreader,serif; font-weight:500; font-size:32px; line-height:1.12; letter-spacing:-0.6px; color:#1A1714; margin:0 0 12px;">What are you<br>into?</h1>
+            <p style="font-size:15px; line-height:1.5; color:#6E6862; margin:0 0 28px;">Pick a few topics and we'll build your daily stack. You can always change these later.</p>
+
+            <div style="display:flex; flex-wrap:wrap; gap:11px;">
+              <sc-for list="{{ chips }}" as="chip" hint-placeholder-count="12">
+                <div style="{{ chip.style }}" onClick="{{ chip.onClick }}">{{ chip.name }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- footer -->
+          <div style="flex-shrink:0; padding:14px 24px 30px; background:rgba(252,251,249,0.82); backdrop-filter:blur(22px) saturate(180%); -webkit-backdrop-filter:blur(22px) saturate(180%); border-top:0.5px solid rgba(26,23,20,0.08);">
+            <div style="{{ continueStyle }}">
+              <span>{{ continueLabel }}</span>
+              <span style="font-size:17px;">&#8594;</span>
+            </div>
+            <div style="text-align:center; margin-top:14px; font-size:13px; font-weight:500; color:#9C958D;">Skip for now</div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#F1543B&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#F1543B&quot;,&quot;#2F6BFF&quot;,&quot;#0E9C6E&quot;,&quot;#7A3BF0&quot;],&quot;section&quot;:&quot;Theme&quot;},&quot;showSwipeCues&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Feed&quot;},&quot;swipeSensitivity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:90,&quot;min&quot;:50,&quot;max&quot;:150,&quot;step&quot;:5,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Feed&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.rootRef = React.createRef();
+    this.state = {
+      cursor: 0, dx: 0, dy: 0, dragging: false, flying: null, savedFilter: 'All',
+      cats: { Tech: true, World: true, Science: false, Business: false, Sports: false, Entertainment: false, Health: false, Culture: true, Politics: false, Travel: false, Food: false, Climate: false },
+    };
+    this.cards = [
+      { category: 'Tech', headline: 'The quiet chip war reshaping who controls the future of AI', source: 'The Signal', logo: 'S', time: '2h ago', credit: 'bloomberg / archive', tone: 'linear-gradient(135deg,#0B3B3C,#1C6E6B 55%,#3AA79B)' },
+      { category: 'World', headline: 'Coastal cities race to redraw their maps as the water keeps rising', source: 'Atlas', logo: 'A', time: '4h ago', credit: 'reuters / delta survey', tone: 'linear-gradient(140deg,#12294D,#2B4E86 60%,#6C8FC7)' },
+      { category: 'Sports', headline: 'An underdog season ends in the only way that ever felt possible', source: 'Baseline', logo: 'B', time: '6h ago', credit: 'getty / field pool', tone: 'linear-gradient(135deg,#5A1E12,#A8442A 55%,#E08A5A)' },
+      { category: 'Science', headline: 'Astronomers find a planet that should not exist orbiting a dead star', source: 'Orbit', logo: 'O', time: '8h ago', credit: 'eso / vlt array', tone: 'linear-gradient(140deg,#241238,#5A2E7A 60%,#9A6FB0)' },
+      { category: 'Business', headline: 'The four-day week is quietly becoming the default at these firms', source: 'Ledger', logo: 'L', time: '10h ago', credit: 'ap / newsroom', tone: 'linear-gradient(135deg,#2E3312,#5F6A22 60%,#A6B04E)' },
+    ];
+    this.saved = [
+      { category: 'Tech', headline: 'The quiet chip war reshaping who controls the future of AI', source: 'The Signal', time: '2h ago', progress: 62, tone: 'linear-gradient(135deg,#0B3B3C,#1C6E6B 55%,#3AA79B)' },
+      { category: 'World', headline: 'Coastal cities race to redraw their maps as water keeps rising', source: 'Atlas', time: '1d ago', progress: 0, tone: 'linear-gradient(140deg,#12294D,#2B4E86 60%,#6C8FC7)' },
+      { category: 'Business', headline: 'The four-day week is quietly becoming the default', source: 'Ledger', time: '5h ago', progress: 0, tone: 'linear-gradient(135deg,#2E3312,#5F6A22 60%,#A6B04E)' },
+      { category: 'Science', headline: 'A planet that should not exist orbits a long-dead star', source: 'Orbit', time: '1d ago', progress: 0, tone: 'linear-gradient(140deg,#241238,#5A2E7A 60%,#9A6FB0)' },
+      { category: 'Sports', headline: 'An underdog season ends the only way it ever could', source: 'Baseline', time: '2d ago', progress: 0, tone: 'linear-gradient(135deg,#5A1E12,#A8442A 55%,#E08A5A)' },
+      { category: 'Tech', headline: 'Foldable laptops are finally starting to make real sense', source: 'The Signal', time: '3d ago', progress: 0, tone: 'linear-gradient(135deg,#123A5A,#215E86 55%,#4E97C7)' },
+    ];
+  }
+
+  applyAccent() {
+    const el = this.rootRef.current;
+    if (el && this.props.accent) el.style.setProperty('--accent', this.props.accent);
+  }
+  componentDidMount() { this.applyAccent(); }
+  componentDidUpdate() { this.applyAccent(); }
+
+  onDown = (e) => {
+    this._sx = e.clientX; this._sy = e.clientY;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    this.setState({ dragging: true });
+  };
+  onMove = (e) => {
+    if (!this.state.dragging) return;
+    this.setState({ dx: e.clientX - this._sx, dy: e.clientY - this._sy });
+  };
+  onUp = () => {
+    if (!this.state.dragging) return;
+    const { dx, dy } = this.state;
+    const TH = this.props.swipeSensitivity ?? 90;
+    let dir = null;
+    if (dy < -TH && Math.abs(dy) > Math.abs(dx)) dir = 'up';
+    else if (dx > TH) dir = 'right';
+    else if (dx < -TH) dir = 'left';
+    if (dir) {
+      this.setState({ flying: dir, dragging: false });
+      setTimeout(() => this.setState(s => ({ cursor: (s.cursor + 1) % this.cards.length, flying: null, dx: 0, dy: 0 })), 380);
+    } else {
+      this.setState({ dx: 0, dy: 0, dragging: false });
+    }
+  };
+  toggleCat = (name) => this.setState(s => ({ cats: { ...s.cats, [name]: !s.cats[name] } }));
+
+  renderVals() {
+    const n = this.cards.length;
+    const { cursor, dx, dy, dragging, flying, cats } = this.state;
+    const cues = this.props.showSwipeCues !== false;
+    const TH = this.props.swipeSensitivity ?? 90;
+
+    const top = this.cards[cursor];
+    const next = this.cards[(cursor + 1) % n];
+
+    const base = {
+      position: 'absolute', top: 8, left: 16, right: 16, bottom: 96,
+      borderRadius: 28, overflow: 'hidden', background: '#fff', zIndex: 3,
+      display: 'flex', flexDirection: 'column', touchAction: 'none', userSelect: 'none',
+      WebkitUserSelect: 'none', cursor: dragging ? 'grabbing' : 'grab',
+      boxShadow: '0 20px 44px rgba(26,23,20,0.17), 0 4px 12px rgba(26,23,20,0.08)',
+    };
+    let transform, opacity = 1, transition;
+    if (flying === 'left') { transform = 'translate(-175%, 26px) rotate(-22deg)'; opacity = 0; transition = 'transform .44s cubic-bezier(.4,0,.6,1), opacity .44s'; }
+    else if (flying === 'right') { transform = 'translate(175%, 26px) rotate(22deg)'; opacity = 0; transition = 'transform .44s cubic-bezier(.4,0,.6,1), opacity .44s'; }
+    else if (flying === 'up') { transform = 'translate(0, -175%) rotate(-3deg)'; opacity = 0; transition = 'transform .44s cubic-bezier(.4,0,.6,1), opacity .44s'; }
+    else { transform = 'translate(' + dx + 'px, ' + dy + 'px) rotate(' + (dx * 0.05) + 'deg)'; transition = dragging ? 'none' : 'transform .5s cubic-bezier(.2,.85,.25,1)'; }
+    const topStyle = { ...base, transform, opacity, transition };
+
+    const clamp = (v) => Math.max(0, Math.min(1, v));
+    const horiz = Math.abs(dx) >= Math.abs(dy);
+    let saveOp = horiz ? clamp(dx / TH) : 0;
+    let dismissOp = horiz ? clamp(-dx / TH) : 0;
+    let readOp = !horiz ? clamp(-dy / TH) : 0;
+    if (flying === 'right') saveOp = 1;
+    if (flying === 'left') dismissOp = 1;
+    if (flying === 'up') readOp = 1;
+    if (!cues) { saveOp = flying === 'right' ? saveOp : 0; dismissOp = flying === 'left' ? dismissOp : 0; readOp = flying === 'up' ? readOp : 0; }
+
+    // ---- Saved screen: live filters + featured ----
+    const SAVED = this.saved;
+    const activeF = this.state.savedFilter;
+    const filterNames = ['All', 'Tech', 'Business', 'World', 'Science', 'Sports'];
+    const savedFilters = filterNames.map(name => {
+      const c = name === 'All' ? SAVED.length : SAVED.filter(s => s.category === name).length;
+      const sel = activeF === name;
+      return {
+        name, count: c, onClick: () => this.setState({ savedFilter: name }),
+        style: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '8px 14px', borderRadius: 999, cursor: 'pointer', fontFamily: "'Instrument Sans',sans-serif", fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', transition: 'all .16s ease', background: sel ? 'var(--accent)' : '#fff', color: sel ? '#fff' : '#5A544E', border: sel ? '1.5px solid var(--accent)' : '1.5px solid rgba(26,23,20,0.1)', boxShadow: sel ? '0 3px 10px rgba(241,84,59,0.26)' : 'none' },
+        badgeStyle: { fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999, background: sel ? 'rgba(255,255,255,0.28)' : 'rgba(26,23,20,0.06)', color: sel ? '#fff' : '#9C958D' },
+      };
+    });
+    const filtered = activeF === 'All' ? SAVED : SAVED.filter(s => s.category === activeF);
+    const featObj = activeF === 'All' ? SAVED.find(s => s.progress > 0) : null;
+    const listSrc = featObj ? filtered.filter(s => s !== featObj) : filtered;
+    const savedList = listSrc.map((s, i) => ({
+      category: s.category, headline: s.headline, meta: s.source + ' · ' + s.time,
+      thumbStyle: { width: 62, height: 62, borderRadius: 13, flexShrink: 0, background: s.tone },
+      cardStyle: { position: 'relative', transform: i === 0 ? 'translateX(-84px)' : 'translateX(0)', transition: 'transform .3s ease', background: '#fff', border: '0.5px solid rgba(26,23,20,0.07)', borderRadius: 18, display: 'flex', alignItems: 'center', gap: 13, padding: '11px 13px', boxShadow: '0 2px 8px rgba(26,23,20,0.05)' },
+    }));
+    const featured = featObj ? {
+      category: featObj.category, headline: featObj.headline, meta: featObj.source + ' · ' + featObj.time, tone: featObj.tone,
+      progressLabel: featObj.progress + '% read  ·  ' + Math.max(1, Math.round((100 - featObj.progress) / 100 * 6)) + ' min left',
+      progressStyle: { width: featObj.progress + '%', height: '100%', borderRadius: 999, background: 'var(--accent)' },
+    } : null;
+    const listLabel = activeF === 'All' ? 'All saved' : activeF;
+    const isEmpty = savedList.length === 0;
+    const savedCount = SAVED.length;
+    const unreadCount = SAVED.filter(s => s.progress === 0).length;
+
+    // onboarding chips
+    const CATS = ['Tech', 'Business', 'Sports', 'World', 'Science', 'Entertainment', 'Health', 'Culture', 'Politics', 'Travel', 'Food', 'Climate'];
+    const chips = CATS.map(name => {
+      const sel = !!cats[name];
+      return {
+        name,
+        onClick: () => this.toggleCat(name),
+        style: {
+          padding: '11px 18px', borderRadius: 999, cursor: 'pointer',
+          fontFamily: "'Instrument Sans',sans-serif", fontSize: 15, fontWeight: 600,
+          transition: 'all .18s ease', WebkitUserSelect: 'none', userSelect: 'none',
+          background: sel ? 'var(--accent)' : '#fff',
+          color: sel ? '#fff' : '#3A342E',
+          border: sel ? '1.5px solid var(--accent)' : '1.5px solid rgba(26,23,20,0.12)',
+          boxShadow: sel ? '0 4px 12px rgba(241,84,59,0.28)' : 'none',
+        },
+      };
+    });
+    const count = Object.values(cats).filter(Boolean).length;
+    const ready = count >= 3;
+    const continueStyle = {
+      height: 54, borderRadius: 16, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', gap: 8, cursor: 'pointer',
+      fontFamily: "'Instrument Sans',sans-serif", fontSize: 16, fontWeight: 600,
+      transition: 'all .2s ease',
+      background: ready ? 'var(--accent)' : 'rgba(120,113,105,0.14)',
+      color: ready ? '#fff' : '#A7A099',
+      boxShadow: ready ? '0 6px 18px rgba(241,84,59,0.32)' : 'none',
+    };
+    const continueLabel = count === 0 ? 'Pick at least 3 topics' : ready ? ('Continue with ' + count) : ('Pick ' + (3 - count) + ' more');
+
+    return {
+      rootRef: this.rootRef,
+      top, next, topStyle, saveOp, dismissOp, readOp,
+      onDown: this.onDown, onMove: this.onMove, onUp: this.onUp,
+      savedFilters, savedList, featured, listLabel, isEmpty, savedCount, unreadCount,
+      chips, continueStyle, continueLabel,
+    };
+  }
+}
+</script>
+</body>
+</html>
