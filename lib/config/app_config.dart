@@ -23,11 +23,34 @@ abstract final class AppConfig {
     return (value == null || value.isEmpty) ? null : value;
   }
 
-  static String? get guardianApiKey => _key('GUARDIAN_API_KEY');
+  /// Shared secret for the guardian-body Edge Function (x-body-secret
+  /// header), which fetches Guardian article bodies for the reader. NOT a
+  /// news-API key — the Guardian and NewsData keys live exclusively in Edge
+  /// Function secrets and must never return to this bundle. This value only
+  /// gates the body proxy against anonymous scripted calls; it deliberately
+  /// unlocks nothing else (ingest-news and embed keep their own secrets).
+  static String? get bodyFnSecret => _key('BODY_FN_SECRET');
 
-  static String? get newsdataApiKey => _key('NEWSDATA_API_KEY');
+  static String? get supabaseUrl => _key('SUPABASE_URL');
 
-  /// True when at least one live content source is configured.
-  static bool get hasLiveContent =>
-      guardianApiKey != null || newsdataApiKey != null;
+  static String? get supabaseAnonKey => _key('SUPABASE_ANON_KEY');
+
+  /// True when persistence is configured. Without it the app runs entirely
+  /// in-memory, exactly as before Phase 3.
+  static bool get hasSupabase => supabaseUrl != null && supabaseAnonKey != null;
+
+  /// Sign in with Apple is fully wired but OFF until the account-side setup
+  /// is done. To activate:
+  ///  1. Join the Apple Developer Program.
+  ///  2. In Xcode (Runner target → Signing & Capabilities) add the
+  ///     "Sign in with Apple" capability with your real team/bundle id.
+  ///  3. In Supabase: Auth → Providers → Apple → enable, and add the app's
+  ///     bundle id to "Client IDs" (native iOS validates the idToken
+  ///     directly — no Services ID or .p8 secret needed).
+  ///  4. In Supabase: Auth → Settings → enable "manual linking", so a
+  ///     guest's Apple identity links onto their existing anonymous user.
+  ///  5. Flip this to true (or build with
+  ///     `--dart-define=BITE_APPLE_SIGN_IN=true`).
+  static const bool appleSignInEnabled =
+      bool.fromEnvironment('BITE_APPLE_SIGN_IN');
 }

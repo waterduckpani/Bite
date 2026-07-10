@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/bite_tab_bar.dart';
 import '../widgets/category_chip.dart';
 import '../widgets/pressable.dart';
+import '../widgets/sign_in_sheet.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -33,22 +34,40 @@ class ProfileScreen extends StatelessWidget {
                   color: bite.ink,
                   shape: BoxShape.circle,
                 ),
-                child: Text('B',
-                    style: display(size: 26, weight: 640, color: bite.paper)),
+                child: Text(
+                  state.isSignedIn
+                      ? state.accountEmail![0].toUpperCase()
+                      : 'B',
+                  style: display(size: 26, weight: 640, color: bite.paper),
+                ),
               ),
               const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Bharat', style: display(size: 26, weight: 620)),
-                  Text(
-                    'Reading since July 2026',
-                    style: sans(size: 12.5, color: bite.muted),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      state.isSignedIn ? state.accountEmail! : 'Guest',
+                      style: display(
+                          size: state.isSignedIn ? 19 : 26, weight: 620),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      state.isSignedIn
+                          ? 'Saves synced across devices'
+                          : 'Reading since July 2026',
+                      style: sans(size: 12.5, color: bite.muted),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
+          if (state.hasAccounts && !state.isSignedIn) ...[
+            const SizedBox(height: 20),
+            _GuestPrompt(bite: bite),
+          ],
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.symmetric(vertical: 18),
@@ -110,6 +129,32 @@ class ProfileScreen extends StatelessWidget {
               label: const Text('Bring back skipped stories'),
             ),
           ),
+          if (state.isSignedIn) ...[
+            const SizedBox(height: 10),
+            Pressable(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  foregroundColor: bite.danger,
+                  side: BorderSide(color: bite.border, width: 0.75),
+                  textStyle: sans(size: 14.5, weight: FontWeight.w500),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
+                onPressed: () async {
+                  HapticFeedback.selectionClick();
+                  final messenger = ScaffoldMessenger.of(context);
+                  await state.signOut();
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('Signed out — browsing as a guest'),
+                  ));
+                },
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Sign out'),
+              ),
+            ),
+          ],
           const SizedBox(height: 32),
           Center(
             child: Text(
@@ -118,9 +163,49 @@ class ProfileScreen extends StatelessWidget {
                   'live stories from The Guardian & NewsData.io',
                 ContentStatus.loading => 'fetching live stories…',
                 ContentStatus.mock => 'sample stories (no API keys)',
-              }}\nSaves and history reset on restart',
+              }}\n${state.hasAccounts ? (state.isSignedIn ? 'Signed in as ${state.accountEmail}' : 'Guest saves live on this device until you sign in') : 'Saves and history reset on restart'}',
               textAlign: TextAlign.center,
               style: sans(size: 11.5, color: bite.faint, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gentle nudge shown to guests — sign-in is always optional.
+class _GuestPrompt extends StatelessWidget {
+  const _GuestPrompt({required this.bite});
+
+  final BiteColors bite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: bite.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: bite.accent.withValues(alpha: 0.25),
+            width: 0.75),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Browsing as a guest — sign in to keep your saves across devices.',
+            style: sans(size: 13.5, color: bite.ink, height: 1.45),
+          ),
+          const SizedBox(height: 14),
+          Pressable(
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                textStyle: sans(size: 14.5, weight: FontWeight.w600),
+              ),
+              onPressed: () => showSignInSheet(context),
+              child: const Text('Sign in'),
             ),
           ),
         ],
