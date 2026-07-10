@@ -1,4 +1,10 @@
 .env
+# Edge Function secrets (pushed with `supabase secrets set --env-file`)
+supabase/functions/.env.secrets
+# Supabase CLI local link state
+supabase/.temp/
+# DB migrations kept local (contain deployed vault secret values)
+supabase/migrations/
 
 # Flutter/Dart
 .dart_tool/
