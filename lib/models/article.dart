@@ -82,6 +82,10 @@ class Article {
 
   final String _timeAgoLabel;
 
+  /// Whether the story carries a loadable cover photo. Non-http values
+  /// (empty, relative paths) fall back to the palette gradient.
+  bool get hasImage => imageUrl.startsWith('http');
+
   /// Hero tags shared by the feed card and the reader/browser screens, so
   /// the cover and headline morph between them on swipe-up.
   String get coverHeroTag => 'article-cover-$id';

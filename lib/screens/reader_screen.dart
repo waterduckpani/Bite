@@ -13,7 +13,7 @@ import '../widgets/pressable.dart';
 import 'browser_screen.dart';
 
 /// Native reader for stories with licensed full text (Guardian, mock).
-class ReaderScreen extends StatelessWidget {
+class ReaderScreen extends StatefulWidget {
   const ReaderScreen({super.key, required this.article});
 
   final Article article;
@@ -27,6 +27,59 @@ class ReaderScreen extends StatelessWidget {
           ? ReaderScreen(article: article)
           : BrowserScreen(article: article)),
     );
+  }
+
+  @override
+  State<ReaderScreen> createState() => _ReaderScreenState();
+}
+
+class _ReaderScreenState extends State<ReaderScreen> {
+  Article get article => widget.article;
+
+  /// Paragraphs to render. Articles arrive as metadata only (bodies are
+  /// never persisted), so a Guardian body is fetched on demand through the
+  /// guardian-body Edge Function — no news-API key ships in the client.
+  /// Null while that fetch is in flight; a failure degrades to the
+  /// open-in-browser state below, which needs no key either.
+  List<String>? _body;
+  bool _bodyFailed = false;
+  bool _fetchStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (article.body.isNotEmpty) {
+      _body = article.body;
+    } else if (article.provider != ArticleProvider.guardian) {
+      _bodyFailed = true;
+    }
+    // Guardian bodies are fetched from didChangeDependencies — the fetch
+    // goes through AppState, and AppScope can't be read during initState.
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_body == null && !_bodyFailed && !_fetchStarted) {
+      _fetchStarted = true;
+      _fetchBody(AppScope.of(context));
+    }
+  }
+
+  Future<void> _fetchBody(AppState state) async {
+    try {
+      final body = await state.fetchGuardianBody(article.id);
+      if (!mounted) return;
+      setState(() {
+        if (body.isEmpty) {
+          _bodyFailed = true;
+        } else {
+          _body = body;
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _bodyFailed = true);
+    }
   }
 
   @override
@@ -125,7 +178,33 @@ class ReaderScreen extends StatelessWidget {
                     const SizedBox(height: 20),
                     const Divider(),
                     const SizedBox(height: 16),
-                    for (final (i, paragraph) in article.body.indexed) ...[
+                    if (_body == null && !_bodyFailed)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
+                        ),
+                      )
+                    else if (_bodyFailed) ...[
+                      Text(
+                        "Couldn't load this story right now.",
+                        style: display(size: 17, weight: 460, height: 1.5),
+                      ),
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                            articleRoute(BrowserScreen(article: article))),
+                        icon: const Icon(Icons.public, size: 18),
+                        label: Text('Read at ${article.source}'),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                    for (final (i, paragraph)
+                        in (_body ?? const <String>[]).indexed) ...[
                         if (i == 1)
                           // Pull-quote: a weighted sage callout set off by a
                           // hairline accent bar.
