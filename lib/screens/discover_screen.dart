@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
 import '../widgets/bite_tab_bar.dart';
+import '../widgets/cover_art.dart';
 import '../widgets/pressable.dart';
 import '../widgets/saved_tile.dart';
 import 'reader_screen.dart';
@@ -28,62 +29,74 @@ class DiscoverScreen extends StatelessWidget {
 
     return SafeArea(
       bottom: false,
-      child: CustomScrollView(
-        key: const PageStorageKey('discover.scroll'),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      // Pull-to-refresh re-queries the ranked deck from the database — a
+      // cheap RPC, never a news-API call (ingestion is server-side cron).
+      child: RefreshIndicator.adaptive(
+        onRefresh: () => state.refreshFeed(force: true),
+        edgeOffset: 16,
+        child: CustomScrollView(
+          key: const PageStorageKey('discover.scroll'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Discover', style: display(size: 34, weight: 680)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Browse every topic in the stack',
+                      style: sans(size: 13, color: bite.muted),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _Entrance(
+                index: 0,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 24, bottom: 10),
+                  child: Text('TRENDING TODAY',
+                      style: caps(size: 10.5, color: bite.muted)),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _Entrance(
+                index: 1,
+                child: _TrendingCarousel(articles: trending),
+              ),
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                  24,
+                  24,
+                  24,
+                  24 +
+                      kBiteTabBarReserved +
+                      MediaQuery.paddingOf(context).bottom),
+              sliver: SliverGrid.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.45,
                 children: [
-                  Text('Discover', style: display(size: 34, weight: 680)),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Browse every topic in the stack',
-                    style: sans(size: 13, color: bite.muted),
-                  ),
+                  for (final (i, c) in Category.values.indexed)
+                    _Entrance(
+                      index: 2 + i,
+                      child: _CategoryTile(
+                        category: c,
+                        count: state.articlesIn(c).length,
+                      ),
+                    ),
                 ],
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: _Entrance(
-              index: 0,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 24, bottom: 10),
-                child: Text('TRENDING TODAY',
-                    style: caps(size: 10.5, color: bite.muted)),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: _Entrance(
-              index: 1,
-              child: _TrendingCarousel(articles: trending),
-            ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(24, 24, 24,
-                24 + kBiteTabBarReserved + MediaQuery.paddingOf(context).bottom),
-            sliver: SliverGrid.count(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.45,
-              children: [
-                for (final (i, c) in Category.values.indexed)
-                  _Entrance(
-                    index: 2 + i,
-                    child: _CategoryTile(
-                      category: c,
-                      count: state.articlesIn(c).length,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -154,11 +167,15 @@ class _TrendingCarousel extends StatelessWidget {
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  gradient: article.palette.gradient,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
+                    // Real cover when the story has one; CoverArt falls back
+                    // to the palette gradient while loading and when absent.
+                    CoverArt(article: article),
+                    if (article.hasImage) const _Scrim(),
                     Positioned(
                       left: 18,
                       right: 18,
@@ -169,8 +186,7 @@ class _TrendingCarousel extends StatelessWidget {
                           Text(article.category.label.toUpperCase(),
                               style: caps(
                                   size: 9,
-                                  color:
-                                      Colors.white.withValues(alpha: 0.8))),
+                                  color: Colors.white.withValues(alpha: 0.8))),
                           const SizedBox(height: 6),
                           Text(
                             article.headline,
@@ -220,6 +236,14 @@ class _CategoryTile extends StatelessWidget {
     final palette = articles.isEmpty
         ? paletteFor(category).gradient
         : articles.first.palette.gradient;
+    // Freshest story with a photo represents the topic behind the label.
+    Article? cover;
+    for (final a in articles) {
+      if (a.hasImage) {
+        cover = a;
+        break;
+      }
+    }
     final reduced = reducedMotion(context);
 
     return OpenContainer(
@@ -237,25 +261,57 @@ class _CategoryTile extends StatelessWidget {
       openBuilder: (context, _) => _CategoryList(category: category),
       closedBuilder: (context, openContainer) => Pressable(
         onTap: openContainer,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(gradient: palette),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(category.label,
-                  style: display(size: 21, weight: 640, color: Colors.white)),
-              const SizedBox(height: 2),
-              Text(
-                '$count ${count == 1 ? 'story' : 'stories'}',
-                style: sans(
-                  size: 11.5,
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (cover != null)
+              CoverArt(article: cover)
+            else
+              DecoratedBox(decoration: BoxDecoration(gradient: palette)),
+            if (cover != null) const _Scrim(),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(category.label,
+                      style:
+                          display(size: 21, weight: 640, color: Colors.white)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$count ${count == 1 ? 'story' : 'stories'}',
+                    style: sans(
+                      size: 11.5,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom-weighted darkening laid over a cover photo so the white text on
+/// carousel cards and category tiles stays legible against any image.
+class _Scrim extends StatelessWidget {
+  const _Scrim();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.12),
+            Colors.black.withValues(alpha: 0.58),
+          ],
         ),
       ),
     );

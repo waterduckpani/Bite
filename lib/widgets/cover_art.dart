@@ -20,7 +20,7 @@ class CoverArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = article.imageUrl.startsWith('http');
+    final hasImage = article.hasImage;
     return ClipRRect(
       borderRadius: borderRadius,
       child: Stack(

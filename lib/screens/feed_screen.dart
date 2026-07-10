@@ -37,17 +37,24 @@ class _FeedScreenState extends State<FeedScreen> {
     super.dispose();
   }
 
-  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
+  bool _onSwipe(
+      int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final state = AppScope.of(context);
     final article = _deck[previousIndex];
+    // Top up before the deck runs dry: a cheap re-query of the ranked deck
+    // from the database (never a news-API call), throttled in refreshFeed.
+    if (direction != CardSwiperDirection.top &&
+        _deck.length - previousIndex <= 5) {
+      state.refreshFeed();
+    }
     switch (direction) {
       case CardSwiperDirection.left:
         HapticFeedback.selectionClick();
-        state.dismiss(article);
+        state.swipeLeft(article);
         return true;
       case CardSwiperDirection.right:
         HapticFeedback.lightImpact();
-        state.save(article);
+        state.swipeRight(article);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(
@@ -57,7 +64,8 @@ class _FeedScreenState extends State<FeedScreen> {
         return true;
       case CardSwiperDirection.top:
         // Open the reader; cancel the swipe so the card is still here
-        // when the user comes back.
+        // when the user comes back. Still logged as implicit feedback.
+        state.swipeUp(article);
         ReaderScreen.open(context, article);
         return false;
       default:
@@ -90,40 +98,44 @@ class _FeedScreenState extends State<FeedScreen> {
             child: state.status == ContentStatus.loading
                 ? const _LoadingDeck()
                 : _finished
-                    ? _CaughtUp(onReset: state.resetFeed)
+                    ? _CaughtUp(
+                        onReset: state.resetFeed,
+                        onRefresh: () => state.refreshFeed(force: true),
+                      )
                     : Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                    child: CardSwiper(
-                      key: ValueKey(_epoch),
-                      controller: _controller,
-                      cardsCount: _deck.length,
-                      numberOfCardsDisplayed: math.min(2, _deck.length),
-                      backCardOffset: const Offset(0, -32),
-                      scale: 0.94,
-                      padding: EdgeInsets.zero,
-                      isLoop: false,
-                      allowedSwipeDirection: const AllowedSwipeDirection.only(
-                        left: true,
-                        right: true,
-                        up: true,
-                      ),
-                      onSwipe: _onSwipe,
-                      onEnd: () => setState(() => _finished = true),
-                      cardBuilder: (context, index, hPct, vPct) {
-                        final article = _deck[index];
-                        return GestureDetector(
-                          onTap: () => ReaderScreen.open(context, article),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ArticleCard(article: article),
-                              _SwipeCues(hPct: hPct, vPct: vPct),
-                            ],
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                        child: CardSwiper(
+                          key: ValueKey(_epoch),
+                          controller: _controller,
+                          cardsCount: _deck.length,
+                          numberOfCardsDisplayed: math.min(2, _deck.length),
+                          backCardOffset: const Offset(0, -32),
+                          scale: 0.94,
+                          padding: EdgeInsets.zero,
+                          isLoop: false,
+                          allowedSwipeDirection:
+                              const AllowedSwipeDirection.only(
+                            left: true,
+                            right: true,
+                            up: true,
                           ),
-                        );
-                      },
-                    ),
-                  ),
+                          onSwipe: _onSwipe,
+                          onEnd: () => setState(() => _finished = true),
+                          cardBuilder: (context, index, hPct, vPct) {
+                            final article = _deck[index];
+                            return GestureDetector(
+                              onTap: () => ReaderScreen.open(context, article),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ArticleCard(article: article),
+                                  _SwipeCues(hPct: hPct, vPct: vPct),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
           ),
         ),
         Positioned(
@@ -206,12 +218,14 @@ class _GlassHeader extends StatelessWidget {
           child: Row(
             children: [
               Text('Bite', style: display(size: 24, weight: 640)),
-              Text('.', style: display(size: 24, weight: 700, color: bite.accent)),
+              Text('.',
+                  style: display(size: 24, weight: 700, color: bite.accent)),
               const Spacer(),
               IconButton(
                 icon: Icon(Icons.tune, size: 22, color: bite.ink),
                 tooltip: 'Filter your feed',
-                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                constraints:
+                    const BoxConstraints.tightFor(width: 40, height: 40),
                 padding: EdgeInsets.zero,
                 onPressed: onFilter,
               ),
@@ -258,8 +272,8 @@ class _SwipeCues extends StatelessWidget {
             if (upOnly > 0)
               _cueScrim(context, bite.ink, upOnly,
                   alignment: Alignment.bottomCenter,
-                  child: _cueBadge(
-                      'READ', Icons.arrow_upward, bite.ink, upOnly)),
+                  child:
+                      _cueBadge('READ', Icons.arrow_upward, bite.ink, upOnly)),
           ],
         ),
       ),
@@ -270,8 +284,9 @@ class _SwipeCues extends StatelessWidget {
       {required Alignment alignment, required Widget child}) {
     // The badge springs in with the drag: scale rides an easeOutBack of the
     // drag progress so it lands with a little overshoot instead of popping.
-    final scale =
-        reducedMotion(context) ? 1.0 : 0.7 + 0.3 * BiteMotion.spring.transform(t);
+    final scale = reducedMotion(context)
+        ? 1.0
+        : 0.7 + 0.3 * BiteMotion.spring.transform(t);
     return Container(
       color: color.withValues(alpha: 0.10 * t),
       alignment: alignment,
@@ -363,9 +378,13 @@ class _LoadingDeck extends StatelessWidget {
 }
 
 class _CaughtUp extends StatelessWidget {
-  const _CaughtUp({required this.onReset});
+  const _CaughtUp({required this.onReset, required this.onRefresh});
 
   final VoidCallback onReset;
+
+  /// Re-queries the ranked deck from the server — new stories land there
+  /// every cron tick, so "caught up" goes stale within the half hour.
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -388,14 +407,21 @@ class _CaughtUp extends StatelessWidget {
             const SizedBox(height: 24),
             Pressable(
               child: FilledButton(
-                style:
-                    FilledButton.styleFrom(minimumSize: const Size(220, 52)),
+                style: FilledButton.styleFrom(minimumSize: const Size(220, 52)),
                 onPressed: () {
                   HapticFeedback.selectionClick();
                   onReset();
                 },
                 child: const Text('Bring back skipped stories'),
               ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                onRefresh();
+              },
+              child: const Text('Check for new stories'),
             ),
           ],
         ),
