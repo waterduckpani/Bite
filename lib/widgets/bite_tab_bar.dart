@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
 import 'glass.dart';
@@ -15,6 +16,7 @@ class BiteTab {
 const _tabs = [
   BiteTab('Feed', Icons.style_outlined, Icons.style),
   BiteTab('Saved', Icons.bookmark_border, Icons.bookmark),
+  BiteTab('Tracked', Icons.track_changes_outlined, Icons.track_changes),
   BiteTab('Discover', Icons.explore_outlined, Icons.explore),
   BiteTab('Profile', Icons.person_outline, Icons.person),
 ];
@@ -42,6 +44,7 @@ class BiteTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final bite = context.bite;
     final reduced = reducedMotion(context);
+    final unread = AppScope.of(context).trackerUnreadCount;
     return SafeArea(
       top: false,
       child: Padding(
@@ -69,10 +72,13 @@ class BiteTabBar extends StatelessWidget {
                             scale: i == index && !reduced ? 1.12 : 1.0,
                             duration: BiteMotion.standard,
                             curve: BiteMotion.spring,
-                            child: Icon(
-                              i == index ? _tabs[i].activeIcon : _tabs[i].icon,
-                              size: 22,
+                            child: _TabIcon(
+                              icon: i == index
+                                  ? _tabs[i].activeIcon
+                                  : _tabs[i].icon,
                               color: i == index ? bite.ink : bite.muted,
+                              // Unread developments badge (Tracked tab only).
+                              badge: _tabs[i].label == 'Tracked' ? unread : 0,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -96,6 +102,51 @@ class BiteTabBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A tab icon with an optional unread-count badge pinned to its top-right.
+class _TabIcon extends StatelessWidget {
+  const _TabIcon({required this.icon, required this.color, this.badge = 0});
+
+  final IconData icon;
+  final Color color;
+  final int badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    final icon0 = Icon(icon, size: 22, color: color);
+    if (badge <= 0) return icon0;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        icon0,
+        Positioned(
+          top: -5,
+          right: -8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1),
+            constraints: const BoxConstraints(minWidth: 16),
+            decoration: BoxDecoration(
+              color: bite.accent,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: bite.paper, width: 1.5),
+            ),
+            child: Text(
+              badge > 9 ? '9+' : '$badge',
+              textAlign: TextAlign.center,
+              style: sans(
+                size: 9,
+                weight: FontWeight.w700,
+                height: 1.2,
+                color: bite.onAccent,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

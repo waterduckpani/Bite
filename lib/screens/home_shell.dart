@@ -7,6 +7,7 @@ import 'discover_screen.dart';
 import 'feed_screen.dart';
 import 'profile_screen.dart';
 import 'saved_screen.dart';
+import 'tracked_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -22,9 +23,11 @@ class _HomeShellState extends State<HomeShell> {
   // Tabs are rebuilt on each switch (fade-through swaps subtrees), so any
   // state worth keeping lives in AppState or PageStorage, not in the tab's
   // own State. Scroll offsets and the Saved search query use PageStorage.
+  // Order must stay index-aligned with BiteTabBar's _tabs.
   static const _tabs = [
     FeedScreen(),
     SavedScreen(),
+    TrackedScreen(),
     DiscoverScreen(),
     ProfileScreen(),
   ];

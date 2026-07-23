@@ -50,6 +50,8 @@ class Article {
     this.provider = ArticleProvider.mock,
     this.hasFullText = true,
     this.sourceIconUrl = '',
+    this.aiSummary,
+    this.aiSummaryHook,
   }) : _timeAgoLabel = timeAgo;
 
   final String id;
@@ -79,6 +81,20 @@ class Article {
   /// The outlet's favicon, when the provider supplies one. Chrome that needs
   /// an icon falls back to a favicon service, then a lettermark.
   final String sourceIconUrl;
+
+  /// Bite-voice summary, pre-generated server-side from licensed full text
+  /// (Phase 10). Null when never generated or generation failed — the card
+  /// and reader fall back to [snippet]/[body] unchanged. The client never
+  /// generates these.
+  final String? aiSummary;
+
+  /// A one-line plain-spoken hook for [aiSummary]. Null alongside it.
+  final String? aiSummaryHook;
+
+  /// Whether a usable AI summary is present (both parts, non-empty).
+  bool get hasSummary =>
+      (aiSummary?.trim().isNotEmpty ?? false) &&
+      (aiSummaryHook?.trim().isNotEmpty ?? false);
 
   final String _timeAgoLabel;
 

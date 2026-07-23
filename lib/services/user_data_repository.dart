@@ -10,6 +10,8 @@ import '../config/app_config.dart';
 import '../data/mock_articles.dart';
 import '../data/palettes.dart';
 import '../models/article.dart';
+import '../models/country.dart';
+import '../models/story_tracker.dart';
 
 /// How an email OTP will resolve once verified.
 enum EmailOtpMode {
@@ -26,19 +28,32 @@ enum EmailOtpMode {
 class HydratedUserData {
   const HydratedUserData({
     required this.onboarded,
+    required this.seenTutorialVersion,
     required this.categories,
     required this.saved,
     required this.dismissedIds,
+    required this.trackers,
+    required this.country,
   });
 
   final bool onboarded;
+
+  /// Highest gesture-tutorial version this user has acknowledged (0 = never).
+  final int seenTutorialVersion;
+
   final Set<Category> categories;
 
   /// Saved articles, oldest save first (matches AppState's internal order).
   final List<Article> saved;
 
-  /// Left-swiped article ids since the last feed reset.
+  /// Reject-swiped (left) article ids since the last feed reset.
   final Set<String> dismissedIds;
+
+  /// Story trackers, newest-activity first (Phase 13).
+  final List<StoryTracker> trackers;
+
+  /// The user's selected country (defaults to [Country.global]).
+  final Country country;
 }
 
 /// Supabase-backed persistence for per-user state, with anonymous auth as
@@ -209,7 +224,7 @@ class UserDataRepository {
 
   /// Loads profile, category prefs, saves, and post-reset dismissals.
   /// Returns null (leaving in-memory defaults intact) when disabled or
-  /// unreachable.
+  /// unreachable. "Dismissals" here are Phase 11 `reject` swipes (left).
   Future<HydratedUserData?> hydrate() async {
     if (!_enabled) return null;
     try {
@@ -227,17 +242,23 @@ class UserDataRepository {
       final profile = results[0] as Map<String, dynamic>?;
       final resetAt = profile?['feed_reset_at'] as String?;
 
-      var leftSwipes = _client
+      var rejectSwipes = _client
           .from('swipe_events')
           .select('article_id')
           .eq('user_id', _uid)
-          .eq('direction', 'left');
-      if (resetAt != null) leftSwipes = leftSwipes.gt('created_at', resetAt);
+          .eq('direction', 'reject');
+      if (resetAt != null) rejectSwipes = rejectSwipes.gt('created_at', resetAt);
       final dismissed =
-          await leftSwipes.timeout(const Duration(seconds: 8));
+          await rejectSwipes.timeout(const Duration(seconds: 8));
+
+      // Trackers are fetched independently so a pre-deploy (RPC-missing) or
+      // transient failure can't abort the rest of hydration.
+      final trackers = await fetchTrackers() ?? const <StoryTracker>[];
 
       final data = HydratedUserData(
         onboarded: profile?['onboarded'] as bool? ?? false,
+        seenTutorialVersion:
+            (profile?['gesture_tutorial_version'] as num?)?.toInt() ?? 0,
         categories: {
           for (final row in results[1] as List)
             if (Category.values.asNameMap()[row['category']] case final c?) c,
@@ -249,10 +270,13 @@ class UserDataRepository {
               a,
         ],
         dismissedIds: {for (final row in dismissed) row['article_id'] as String},
+        trackers: trackers,
+        country: Country.fromName(profile?['country'] as String?),
       );
       debugPrint('UserDataRepository: hydrated onboarded=${data.onboarded}, '
           '${data.categories.length} prefs, ${data.saved.length} saves, '
-          '${data.dismissedIds.length} dismissed');
+          '${data.dismissedIds.length} dismissed, '
+          '${data.trackers.length} trackers');
       return data;
     } catch (e) {
       debugPrint('UserDataRepository: hydrate failed ($e); in-memory.');
@@ -287,6 +311,98 @@ class UserDataRepository {
     }
   }
 
+  // -- Story trackers (Phase 13) ---------------------------------------------
+  // A tracker's centroid + tags are seeded server-side from the article's
+  // existing embedding/Guardian tags (create_tracker), so creation is an RPC,
+  // not a plain insert. Everything else is a normal RLS-scoped table write or
+  // read RPC. Matching (tracker_articles inserts) happens server-side.
+
+  /// The Tracked list: trackers with counts + latest development, newest first.
+  /// Null when disabled/unreachable — callers keep their existing list.
+  Future<List<StoryTracker>?> fetchTrackers() async {
+    if (!_enabled) return null;
+    try {
+      if (!await _ensureSession()) return null;
+      final rows = await _client
+          .rpc('get_trackers')
+          .timeout(const Duration(seconds: 8));
+      return [
+        for (final row in rows as List)
+          if (StoryTracker.fromRow(row as Map<String, dynamic>) case final t?)
+            t,
+      ];
+    } catch (e) {
+      debugPrint('UserDataRepository: fetch trackers failed ($e)');
+      return null;
+    }
+  }
+
+  /// A tracker's developing timeline, newest match first. Empty when the
+  /// tracker has no articles yet; null on failure.
+  Future<List<Article>?> fetchTrackerArticles(String trackerId) async {
+    if (!_enabled) return null;
+    try {
+      if (!await _ensureSession()) return null;
+      final rows = await _client
+          .rpc('get_tracker_articles', params: {'p_tracker_id': trackerId})
+          .timeout(const Duration(seconds: 8));
+      return [
+        for (final row in rows as List)
+          if (_articleFromRow(row as Map<String, dynamic>) case final a?) a,
+      ];
+    } catch (e) {
+      debugPrint('UserDataRepository: fetch tracker articles failed ($e)');
+      return null;
+    }
+  }
+
+  /// Creates a tracker seeded from [article], reusing its server-side
+  /// embedding + Guardian tags. The id is client-generated so the UI is
+  /// optimistic; the RPC is idempotent on (user, seed story).
+  void createTracker(String trackerId, Article article, String title) {
+    _enqueue(() async {
+      await _upsertArticle(article);
+      await _client.rpc('create_tracker', params: {
+        'p_id': trackerId,
+        'p_seed_article_id': article.id,
+        'p_title': title,
+      });
+    });
+  }
+
+  void renameTracker(String trackerId, String title) {
+    _enqueue(() => _client
+        .from('story_trackers')
+        .update({'title': title})
+        .eq('id', trackerId)
+        .eq('user_id', _uid));
+  }
+
+  /// Muting stops future matching without deleting history.
+  void setTrackerMuted(String trackerId, bool muted) {
+    _enqueue(() => _client
+        .from('story_trackers')
+        .update({'muted': muted})
+        .eq('id', trackerId)
+        .eq('user_id', _uid));
+  }
+
+  /// Deletes a tracker and (by cascade) its tracker_articles rows only — the
+  /// underlying articles, saves, and swipe history are untouched.
+  void deleteTracker(String trackerId) {
+    _enqueue(() => _client
+        .from('story_trackers')
+        .delete()
+        .eq('id', trackerId)
+        .eq('user_id', _uid));
+  }
+
+  /// Clears a tracker's unread articles and stamps last_viewed_at.
+  void markTrackerSeen(String trackerId) {
+    _enqueue(() =>
+        _client.rpc('mark_tracker_seen', params: {'p_tracker_id': trackerId}));
+  }
+
   // -- Reader body proxy -------------------------------------------------------
 
   /// Body paragraphs for a Guardian story, served by the guardian-body Edge
@@ -315,6 +431,23 @@ class UserDataRepository {
     _enqueue(() => _client.from('profiles').upsert({
           'id': _uid,
           'onboarded': true,
+        }));
+  }
+
+  /// Persists the user's selected country (Part E). Stored as the enum name;
+  /// the feed RPC maps it to a Guardian tag for the mild country nudge.
+  void setCountry(Country country) {
+    _enqueue(() => _client.from('profiles').upsert({
+          'id': _uid,
+          'country': country.name,
+        }));
+  }
+
+  /// Persists that the user has seen the gesture tutorial at [version].
+  void setGestureTutorialSeen(int version) {
+    _enqueue(() => _client.from('profiles').upsert({
+          'id': _uid,
+          'gesture_tutorial_version': version,
         }));
   }
 
@@ -349,6 +482,11 @@ class UserDataRepository {
         .eq('article_id', articleId));
   }
 
+  /// Appends one implicit-feedback row. [direction] is a Phase 11 signal:
+  /// `reject` (left) / `read` (right) / `save` (down), or `opened` (up/tap) —
+  /// the last is non-terminal and layers an additive positive boost on top of
+  /// the eventual resolution, so a single card can log both an `opened` row
+  /// and its resolving row.
   void recordSwipe(Article article, String direction) {
     _enqueue(() async {
       await _upsertArticle(article);
@@ -460,6 +598,10 @@ class UserDataRepository {
       provider: provider,
       hasFullText: row['full_text_available'] as bool? ?? false,
       sourceIconUrl: row['source_icon_url'] as String? ?? '',
+      // Server-generated (Phase 10); null on rows not yet summarised. The
+      // feed RPC and the saves→articles(*) join both surface these.
+      aiSummary: row['ai_summary'] as String?,
+      aiSummaryHook: row['ai_summary_hook'] as String?,
     );
   }
 }

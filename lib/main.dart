@@ -5,9 +5,12 @@ import 'models/article.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/reader_screen.dart';
+import 'screens/tracker_detail_screen.dart';
+import 'screens/tracker_management_screen.dart';
 import 'services/user_data_repository.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
+import 'theme/motion.dart';
 import 'widgets/sign_in_sheet.dart';
 
 Future<void> main() async {
@@ -67,9 +70,22 @@ class _RootState extends State<_Root> {
   static const _autoOpen = String.fromEnvironment('BITE_AUTO_OPEN');
   bool _opened = false;
 
-  /// Dev convenience: `--dart-define=BITE_AUTO_SWIPE=right` saves the top
-  /// deck card once (only when nothing is saved yet), for verifying
-  /// persistence on the simulator without tap tooling.
+  /// Dev convenience: `--dart-define=BITE_AUTO_FOLLOW=true` follows the
+  /// auto-opened story once (Phase 13), for simulator screenshots of the
+  /// followed state (reader toggle + card badge) without tap tooling.
+  static const _autoFollow = bool.fromEnvironment('BITE_AUTO_FOLLOW');
+  bool _followed = false;
+
+  /// Dev convenience: `--dart-define=BITE_AUTO_TRACKED=detail|manage` pushes a
+  /// tracker's timeline or the management screen once a tracker exists (pair
+  /// with BITE_AUTO_FOLLOW), for simulator screenshots without tap tooling.
+  static const _autoTracked = String.fromEnvironment('BITE_AUTO_TRACKED');
+  bool _trackedNav = false;
+
+  /// Dev convenience: `--dart-define=BITE_AUTO_SWIPE=save` saves the top deck
+  /// card once (only when nothing is saved yet), for verifying persistence on
+  /// the simulator without tap tooling. (`right` kept as a back-compat alias;
+  /// under the Phase 11 model saving is the down gesture, not right.)
   static const _autoSwipe = String.fromEnvironment('BITE_AUTO_SWIPE');
   bool _swiped = false;
 
@@ -99,7 +115,7 @@ class _RootState extends State<_Root> {
         }
       });
     }
-    if (_autoSwipe == 'right' &&
+    if ((_autoSwipe == 'save' || _autoSwipe == 'right') &&
         !_swiped &&
         state.onboarded &&
         !state.hydrating &&
@@ -110,7 +126,36 @@ class _RootState extends State<_Root> {
       final top = state.deck.first;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         debugPrint('BITE_AUTO_SWIPE: saving "${top.headline}" (${top.id})');
-        state.swipeRight(top);
+        state.saveCard(top);
+      });
+    }
+    // Standalone auto-follow (no auto-open): follow the top deck card and stay
+    // on the feed, so the card's followed badge can be screenshotted.
+    if (_autoFollow &&
+        _autoOpen.isEmpty &&
+        !_followed &&
+        state.onboarded &&
+        !state.hydrating &&
+        state.deck.isNotEmpty) {
+      _followed = true;
+      final top = state.deck.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) state.followStory(top);
+      });
+    }
+    if (_autoTracked.isNotEmpty &&
+        !_trackedNav &&
+        state.onboarded &&
+        !state.hydrating &&
+        state.hasTrackers) {
+      _trackedNav = true;
+      final tracker = state.trackers.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final nav = Navigator.of(context, rootNavigator: true);
+        nav.push(articleRoute(_autoTracked == 'manage'
+            ? const TrackerManagementScreen()
+            : TrackerDetailScreen(tracker: tracker)));
       });
     }
     if (_autoOpen.isNotEmpty && !_opened && state.onboarded && !state.hydrating) {
@@ -126,10 +171,16 @@ class _RootState extends State<_Root> {
           .firstOrNull;
       if (match != null) {
         _opened = true;
+        if (_autoFollow) state.followStory(match);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) ReaderScreen.open(context, match);
         });
       }
+    }
+    // Dev convenience: force the onboarding screen for simulator screenshots
+    // even when the restored profile is already onboarded.
+    if (const bool.fromEnvironment('BITE_FORCE_ONBOARDING')) {
+      return const OnboardingScreen();
     }
     // While hydration is in flight for a not-yet-onboarded state, hold a
     // blank page instead of flashing onboarding at a returning user.

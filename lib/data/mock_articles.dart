@@ -28,6 +28,9 @@ final List<Article> mockArticles = [
     url: 'https://thesignal.example/chip-war',
     readMinutes: 6,
     palette: tealPalette,
+    aiSummaryHook: 'A quiet chip war is redrawing who controls AI',
+    aiSummary:
+        'Export rules, secretive fabs, and a scramble for advanced packaging capacity are shifting computing power toward a handful of little-known companies. The fight plays out in cleanrooms and customs offices rather than courtrooms, and its knock-on effects are only starting to be priced in.',
     body: [
       'The most consequential technology fight of the decade is not happening on app stores or in courtrooms. It is happening in cleanrooms, customs offices, and the procurement spreadsheets of a handful of companies most people have never heard of.',
       _fillA,
@@ -88,6 +91,9 @@ final List<Article> mockArticles = [
     url: 'https://orbit.example/dead-star-planet',
     readMinutes: 7,
     palette: plumPalette,
+    aiSummaryHook: 'A planet that should not exist orbits a dead star',
+    aiSummary:
+        'Astronomers have found a gas giant circling a stellar remnant, where models said no planet could survive its star\'s collapse. Its presence challenges assumptions about what becomes of planetary systems after a star dies, hinting that some worlds endure in places long ruled out.',
     body: [
       'By every model on the books, the planet should be a wisp of vapor. Instead it hangs there, intact and improbable, circling the collapsed remnant of the star that should have devoured it.',
       _fillA,

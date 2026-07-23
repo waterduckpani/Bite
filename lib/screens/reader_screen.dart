@@ -10,6 +10,7 @@ import '../widgets/category_chip.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/glass.dart';
 import '../widgets/pressable.dart';
+import '../widgets/reader_cue.dart';
 import 'browser_screen.dart';
 
 /// Native reader for stories with licensed full text (Guardian, mock).
@@ -156,25 +157,64 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Column(
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                article.author,
+                                style: sans(
+                                  size: 13,
+                                  weight: FontWeight.w600,
+                                  color: bite.ink,
+                                ),
+                              ),
+                              Text(
+                                '${article.source}  ·  ${article.timeAgo}  ·  ${article.readMinutes} min read',
+                                style: sans(size: 12, color: bite.muted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Cue matches the reader routing: this native screen is
+                        // only reached for full-text stories, so "Read in Bite".
+                        ReaderCue(article: article),
+                      ],
+                    ),
+                    // The Bite summary sits above the full text — a standalone
+                    // TL;DR while the body loads, and when there is no summary
+                    // this block simply doesn't render.
+                    if (article.hasSummary) ...[
+                      const SizedBox(height: 18),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        decoration: BoxDecoration(
+                          color: bite.accent.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: bite.accent.withValues(alpha: 0.18),
+                            width: 0.75,
+                          ),
+                        ),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Text('THE BITE',
+                                style: caps(size: 10, color: bite.accent)),
+                            const SizedBox(height: 8),
                             Text(
-                              article.author,
-                              style: sans(
-                                size: 13,
-                                weight: FontWeight.w600,
-                                color: bite.ink,
-                              ),
-                            ),
-                            Text(
-                              '${article.source}  ·  ${article.timeAgo}  ·  ${article.readMinutes} min read',
-                              style: sans(size: 12, color: bite.muted),
+                              article.aiSummary!,
+                              style:
+                                  display(size: 16.5, weight: 460, height: 1.5),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     const Divider(),
                     const SizedBox(height: 16),
@@ -308,6 +348,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  _FollowButton(article: article),
+                  const SizedBox(width: 12),
                   Builder(
                     builder: (buttonContext) => _CircleButton(
                       icon: Icons.ios_share,
@@ -331,6 +373,71 @@ class _ReaderScreenState extends State<ReaderScreen> {
         ),
       ),
     );
+  }
+}
+
+/// "Follow this story" affordance: a circular toggle that seeds a Phase 13
+/// tracker from the article. Follow-only (unfollowing lives in tracker
+/// management, behind a confirm, so history isn't lost by a stray tap) — once
+/// following, it shows a filled accent state and a tap just reaffirms it.
+class _FollowButton extends StatelessWidget {
+  const _FollowButton({required this.article});
+
+  final Article article;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppScope.of(context);
+    final bite = context.bite;
+    final following = state.isFollowing(article.id);
+    final atCap = state.trackers.length >= AppState.maxTrackers;
+
+    return Material(
+      color: following ? bite.accent : Colors.transparent,
+      shape: following
+          ? const CircleBorder()
+          : CircleBorder(side: BorderSide(color: bite.border, width: 0.75)),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () {
+          if (following) {
+            HapticFeedback.selectionClick();
+            _snack(context, 'Following this story');
+            return;
+          }
+          if (atCap) {
+            _snack(context,
+                'You can follow up to ${AppState.maxTrackers} stories.');
+            return;
+          }
+          HapticFeedback.mediumImpact();
+          state.followStory(article);
+          _snack(context, 'Following — new developments land in Tracked');
+        },
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            following ? Icons.notifications_active : Icons.notifications_none,
+            size: 20,
+            color: following ? bite.onAccent : bite.ink,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _snack(BuildContext context, String message) {
+    final bite = context.bite;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message,
+            style: sans(size: 13, weight: FontWeight.w500, color: bite.paper)),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: bite.ink,
+        duration: const Duration(seconds: 2),
+      ));
   }
 }
 

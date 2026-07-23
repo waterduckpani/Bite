@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/article.dart';
+import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
 import 'category_chip.dart';
 import 'cover_art.dart';
+import 'reader_cue.dart';
 import 'source_mark.dart';
 
 /// The big feed card: gradient cover with a category chip, serif headline,
@@ -17,6 +19,12 @@ class ArticleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bite = context.bite;
+    // When a Bite summary is present, the punchy hook leads (it morphs into
+    // the fuller real headline in the reader) and the summary is the body.
+    // Otherwise fall back to the publisher headline + standfirst, unchanged.
+    final hasSummary = article.hasSummary;
+    final leadLine = hasSummary ? article.aiSummaryHook! : article.headline;
+    final bodyLine = hasSummary ? article.aiSummary! : article.snippet;
     return Container(
       decoration: BoxDecoration(
         color: bite.card,
@@ -53,6 +61,10 @@ class ArticleCard extends StatelessWidget {
                   left: 14,
                   child: CategoryChip(label: article.category.label),
                 ),
+                // Followed-state marker (Phase 13): shows this story is already
+                // tracked, so it reads as followed and can't be double-followed.
+                if (AppScope.of(context).isFollowing(article.id))
+                  const Positioned(top: 14, right: 14, child: _FollowingBadge()),
               ],
             ),
           ),
@@ -73,7 +85,7 @@ class ArticleCard extends StatelessWidget {
                         child: Material(
                           type: MaterialType.transparency,
                           child: Text(
-                            article.headline,
+                            leadLine,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style:
@@ -86,17 +98,48 @@ class ArticleCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Expanded(
                     child: Text(
-                      article.snippet,
+                      bodyLine,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: sans(size: 13.5, height: 1.5, color: bite.muted),
                     ),
                   ),
-                  SourceMark(article: article),
+                  Row(
+                    children: [
+                      Expanded(child: SourceMark(article: article)),
+                      const SizedBox(width: 8),
+                      ReaderCue(article: article),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small "Following" pill shown on the cover of a tracked story.
+class _FollowingBadge extends StatelessWidget {
+  const _FollowingBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bite.accent,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.notifications_active, size: 12, color: bite.onAccent),
+          const SizedBox(width: 4),
+          Text('Following', style: caps(size: 9, color: bite.onAccent)),
         ],
       ),
     );

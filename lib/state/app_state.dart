@@ -1,8 +1,12 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
+import 'package:uuid/uuid.dart';
 
+import '../config/feed_config.dart';
 import '../data/mock_articles.dart';
 import '../models/article.dart';
+import '../models/country.dart';
+import '../models/story_tracker.dart';
 import '../services/user_data_repository.dart';
 
 /// Where the current article pool came from.
@@ -19,15 +23,39 @@ class AppState extends ChangeNotifier {
 
   bool onboarded = false;
 
+  /// Highest gesture-tutorial version this user has seen (0 = never). The
+  /// coach-mark shows while this is below [FeedConfig.gestureTutorialVersion].
+  int _seenTutorialVersion = 0;
+
   /// True while startup hydration from Supabase is in flight — the root
   /// widget holds off on choosing onboarding vs. home until this settles.
   bool hydrating = false;
 
   final Set<Category> selectedCategories = {};
+
+  /// The user's country (Part E). [Country.global] applies no feed nudge.
+  Country country = Country.global;
+  // Rejected (swiped-left) cards — cleared by "reset feed", mirroring the
+  // server's post-watermark dismissals.
   final Set<String> _dismissedIds = {};
+  // Read (swiped-right) cards — a permanent local exclusion, NOT cleared by a
+  // feed reset, mirroring the server RPC which excludes read stories forever.
+  final Set<String> _readIds = {};
+  // Cards the user has opened this session, so the "opened" positive signal is
+  // logged at most once per card (repeated opens must not stack the boost).
+  final Set<String> _openedIds = {};
 
   // Insertion-ordered so the Saved list shows newest saves first (reversed).
   final List<Article> _saved = [];
+
+  /// Story trackers (Phase 13). Kept as a self-contained system: nothing here
+  /// feeds back into the swipe deck, the taste vector, or feed ranking.
+  final List<StoryTracker> _trackers = [];
+
+  static const _uuid = Uuid();
+
+  /// Max trackers per user, mirroring the server-side cap in create_tracker.
+  static const int maxTrackers = 20;
 
   /// The article pool backing every screen: mock data until (and unless) a
   /// live fetch succeeds.
@@ -48,6 +76,7 @@ class AppState extends ChangeNotifier {
     final data = await repo.hydrate();
     if (data != null) {
       onboarded = onboarded || data.onboarded;
+      _seenTutorialVersion = data.seenTutorialVersion;
       selectedCategories
         ..clear()
         ..addAll(data.categories);
@@ -57,6 +86,10 @@ class AppState extends ChangeNotifier {
       _dismissedIds
         ..clear()
         ..addAll(data.dismissedIds);
+      _trackers
+        ..clear()
+        ..addAll(data.trackers);
+      country = data.country;
     }
     hydrating = false;
     deckEpoch++;
@@ -141,10 +174,12 @@ class AppState extends ChangeNotifier {
 
   int get dismissedCount => _dismissedIds.length;
 
-  /// Articles still eligible for the swipe deck.
+  /// Articles still eligible for the swipe deck. Rejected, read, and saved
+  /// cards all drop out; only rejects come back on a feed reset.
   List<Article> get deck => _articles
       .where((a) =>
           !_dismissedIds.contains(a.id) &&
+          !_readIds.contains(a.id) &&
           !isSaved(a) &&
           (selectedCategories.isEmpty ||
               selectedCategories.contains(a.category)))
@@ -155,16 +190,42 @@ class AppState extends ChangeNotifier {
 
   /// [persist] is false for the dev skip-onboarding flag, so a dev boot
   /// never overwrites the real profile/prefs on the server.
-  void completeOnboarding(Set<Category> picks, {bool persist = true}) {
+  void completeOnboarding(Set<Category> picks,
+      {Country? country, bool persist = true}) {
     selectedCategories
       ..clear()
       ..addAll(picks);
+    if (country != null) this.country = country;
     onboarded = true;
     if (persist) {
       _repo?.setOnboarded();
       _repo?.replaceCategoryPrefs(picks);
+      if (country != null) _repo?.setCountry(country);
     }
     deckEpoch++;
+    notifyListeners();
+  }
+
+  /// Updates the user's country (Part E) and lightly reweights the feed toward
+  /// its coverage. A no-op nudge for [Country.global].
+  void setCountry(Country value) {
+    if (country == value) return;
+    country = value;
+    _repo?.setCountry(value);
+    notifyListeners();
+  }
+
+  /// Whether the first-run gesture coach-mark should be shown: the user is
+  /// past onboarding but hasn't seen the current gesture mapping explained.
+  bool get shouldShowGestureTutorial =>
+      onboarded && _seenTutorialVersion < FeedConfig.gestureTutorialVersion;
+
+  /// Marks the current gesture tutorial as seen (persisted), so it won't
+  /// re-show until [FeedConfig.gestureTutorialVersion] is bumped.
+  void markGestureTutorialSeen() {
+    if (_seenTutorialVersion >= FeedConfig.gestureTutorialVersion) return;
+    _seenTutorialVersion = FeedConfig.gestureTutorialVersion;
+    _repo?.setGestureTutorialSeen(FeedConfig.gestureTutorialVersion);
     notifyListeners();
   }
 
@@ -177,19 +238,38 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Swipes are the feed's gestures: they mutate state like the plain
-  // methods below AND log implicit feedback to swipe_events.
-  void swipeLeft(Article a) {
-    _repo?.recordSwipe(a, 'left');
+  // Phase 11 four-gesture model. Left/right/down each RESOLVE the current card
+  // (dismiss + advance) with a distinct signal; up/tap is non-terminal — it
+  // opens the reader and leaves the card for a later resolving swipe. Every
+  // gesture mutates local state AND logs implicit feedback to swipe_events.
+
+  /// Swipe left — "not interested". The only negative signal.
+  void rejectCard(Article a) {
+    _repo?.recordSwipe(a, 'reject');
     dismiss(a);
   }
 
-  void swipeRight(Article a) {
-    _repo?.recordSwipe(a, 'right');
+  /// Swipe right — "read, done, moving on". A satisfied positive outcome;
+  /// marks the card read (permanent local exclusion) and advances.
+  void readCard(Article a) {
+    _repo?.recordSwipe(a, 'read');
+    _readIds.add(a.id);
+    notifyListeners();
+  }
+
+  /// Swipe down — "save for later". Positive; adds to the saved list and
+  /// advances.
+  void saveCard(Article a) {
+    _repo?.recordSwipe(a, 'save');
     save(a);
   }
 
-  void swipeUp(Article a) => _repo?.recordSwipe(a, 'up');
+  /// Swipe up OR tap — open the full story. Non-terminal, so no dismissal:
+  /// the resolving swipe removes the card. Logs an additive "opened" boost at
+  /// most once per card.
+  void openCard(Article a) {
+    if (_openedIds.add(a.id)) _repo?.recordSwipe(a, 'opened');
+  }
 
   void dismiss(Article a) {
     _dismissedIds.add(a.id);
@@ -217,6 +297,102 @@ class AppState extends ChangeNotifier {
     _dismissedIds.clear();
     _repo?.recordFeedReset();
     deckEpoch++;
+    notifyListeners();
+  }
+
+  // -- Story trackers (Phase 13) ---------------------------------------------
+  // A parallel system to the swipe feed. Follow state and unread counts read
+  // straight off [_trackers]; the deck, taste vector, and ranking never see it.
+
+  /// Trackers sorted by most recent activity (newest development first).
+  List<StoryTracker> get trackers {
+    final list = [..._trackers]..sort((a, b) => b.activityAt.compareTo(a.activityAt));
+    return List.unmodifiable(list);
+  }
+
+  bool get hasTrackers => _trackers.isNotEmpty;
+
+  /// Total unseen matched articles across all trackers — the Tracked tab badge.
+  int get trackerUnreadCount =>
+      _trackers.fold(0, (sum, t) => sum + t.unreadCount);
+
+  /// Whether a tracker already exists for this article's story, so the card
+  /// and reader can show a followed state and block a double-follow.
+  bool isFollowing(String articleId) =>
+      _trackers.any((t) => t.seedArticleId == articleId);
+
+  StoryTracker? trackerById(String id) =>
+      _trackers.where((t) => t.id == id).firstOrNull;
+
+  /// Follows [article]'s story: optimistically adds a tracker seeded from it,
+  /// then persists (the server copies the article's embedding + tags). No-op
+  /// when already following it or at the [maxTrackers] cap.
+  void followStory(Article article) {
+    if (isFollowing(article.id) || _trackers.length >= maxTrackers) return;
+    final id = _uuid.v4();
+    final title = article.hasSummary ? article.aiSummaryHook! : article.headline;
+    _trackers.add(StoryTracker(
+      id: id,
+      title: title,
+      seedArticleId: article.id,
+      createdAt: DateTime.now(),
+    ));
+    _repo?.createTracker(id, article, title);
+    notifyListeners();
+  }
+
+  /// Re-queries the tracker list (counts + latest development) from the server.
+  /// Called when the Tracked tab is opened and after a match refresh.
+  Future<void> refreshTrackers() async {
+    final repo = _repo;
+    if (repo == null || !repo.enabled) return;
+    final fresh = await repo.fetchTrackers();
+    if (fresh == null) return;
+    _trackers
+      ..clear()
+      ..addAll(fresh);
+    notifyListeners();
+  }
+
+  /// The developing timeline for a tracker (newest match first).
+  Future<List<Article>> trackerArticles(String trackerId) async {
+    final repo = _repo;
+    if (repo == null || !repo.enabled) return const [];
+    return await repo.fetchTrackerArticles(trackerId) ?? const [];
+  }
+
+  /// Marks a tracker's articles seen on view — clears its unread count locally
+  /// and on the server.
+  void markTrackerViewed(String trackerId) {
+    final i = _trackers.indexWhere((t) => t.id == trackerId);
+    if (i == -1) return;
+    if (_trackers[i].unreadCount == 0) return;
+    _trackers[i] = _trackers[i].copyWith(unreadCount: 0);
+    _repo?.markTrackerSeen(trackerId);
+    notifyListeners();
+  }
+
+  void renameTracker(String trackerId, String title) {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    final i = _trackers.indexWhere((t) => t.id == trackerId);
+    if (i == -1) return;
+    _trackers[i] = _trackers[i].copyWith(title: trimmed);
+    _repo?.renameTracker(trackerId, trimmed);
+    notifyListeners();
+  }
+
+  void setTrackerMuted(String trackerId, bool muted) {
+    final i = _trackers.indexWhere((t) => t.id == trackerId);
+    if (i == -1) return;
+    _trackers[i] = _trackers[i].copyWith(muted: muted);
+    _repo?.setTrackerMuted(trackerId, muted);
+    notifyListeners();
+  }
+
+  void deleteTracker(String trackerId) {
+    _trackers.removeWhere((t) => t.id == trackerId);
+    _repo?.deleteTracker(trackerId);
     notifyListeners();
   }
 
@@ -266,17 +442,26 @@ class AppState extends ChangeNotifier {
     await _repo!.signOut();
     _saved.clear();
     _dismissedIds.clear();
+    _readIds.clear();
+    _openedIds.clear();
+    _trackers.clear();
     _repo.setOnboarded();
     _repo.replaceCategoryPrefs(selectedCategories);
+    _repo.setCountry(country);
     deckEpoch++;
     notifyListeners();
   }
 
   void _resetLocal() {
     onboarded = false;
+    _seenTutorialVersion = 0;
     selectedCategories.clear();
+    country = Country.global;
     _saved.clear();
     _dismissedIds.clear();
+    _readIds.clear();
+    _openedIds.clear();
+    _trackers.clear();
     deckEpoch++;
   }
 }

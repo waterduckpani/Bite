@@ -11,6 +11,7 @@ import '../theme/motion.dart';
 import '../widgets/article_card.dart';
 import '../widgets/bite_tab_bar.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/gesture_tutorial.dart';
 import '../widgets/glass.dart';
 import '../widgets/pressable.dart';
 import 'reader_screen.dart';
@@ -43,18 +44,26 @@ class _FeedScreenState extends State<FeedScreen> {
     final article = _deck[previousIndex];
     // Top up before the deck runs dry: a cheap re-query of the ranked deck
     // from the database (never a news-API call), throttled in refreshFeed.
+    // Skip on the non-terminal up-swipe — it doesn't consume a card.
     if (direction != CardSwiperDirection.top &&
         _deck.length - previousIndex <= 5) {
       state.refreshFeed();
     }
     switch (direction) {
       case CardSwiperDirection.left:
+        // Not interested. The only negative signal.
         HapticFeedback.selectionClick();
-        state.swipeLeft(article);
+        state.rejectCard(article);
         return true;
       case CardSwiperDirection.right:
+        // Read, done, moving on — the common satisfied outcome.
         HapticFeedback.lightImpact();
-        state.swipeRight(article);
+        state.readCard(article);
+        return true;
+      case CardSwiperDirection.bottom:
+        // Save for later.
+        HapticFeedback.lightImpact();
+        state.saveCard(article);
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(const SnackBar(
@@ -63,14 +72,20 @@ class _FeedScreenState extends State<FeedScreen> {
           ));
         return true;
       case CardSwiperDirection.top:
-        // Open the reader; cancel the swipe so the card is still here
-        // when the user comes back. Still logged as implicit feedback.
-        state.swipeUp(article);
-        ReaderScreen.open(context, article);
+        // Open the reader; cancel the swipe so the same card is still here
+        // when the user returns to resolve it (non-terminal). Logs "opened".
+        _openReader(state, article);
         return false;
       default:
         return false;
     }
+  }
+
+  /// Shared by the up-swipe and the tap: open the full story and log the
+  /// additive "opened" signal, without resolving the card.
+  void _openReader(AppState state, Article article) {
+    state.openCard(article);
+    ReaderScreen.open(context, article);
   }
 
   @override
@@ -118,13 +133,15 @@ class _FeedScreenState extends State<FeedScreen> {
                             left: true,
                             right: true,
                             up: true,
+                            down: true,
                           ),
                           onSwipe: _onSwipe,
                           onEnd: () => setState(() => _finished = true),
                           cardBuilder: (context, index, hPct, vPct) {
                             final article = _deck[index];
                             return GestureDetector(
-                              onTap: () => ReaderScreen.open(context, article),
+                              onTap: () =>
+                                  _openReader(AppScope.of(context), article),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
@@ -144,6 +161,11 @@ class _FeedScreenState extends State<FeedScreen> {
           right: 16,
           child: _GlassHeader(onFilter: () => _showFilters(context)),
         ),
+        // First-run gesture coach-mark, over a live (dimmed) deck so the four
+        // gestures are taught against the cards they act on. Waits for a deck
+        // so the cards peek behind the blur.
+        if (state.shouldShowGestureTutorial && !_finished && _deck.isNotEmpty)
+          GestureTutorial(onDismiss: state.markGestureTutorialSeen),
       ],
     );
   }
@@ -247,11 +269,19 @@ class _SwipeCues extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bite = context.bite;
-    final left = (-hPct / 40).clamp(0.0, 1.0); // dragging left → dismiss
-    final right = (hPct / 40).clamp(0.0, 1.0); // dragging right → save
-    final up = (-vPct / 40).clamp(0.0, 1.0); // dragging up → read
-    // Horizontal intent wins over the slight vertical drift of a diagonal drag.
-    final upOnly = (up - math.max(left, right)).clamp(0.0, 1.0);
+    final l = (-hPct / 40).clamp(0.0, 1.0); // dragging left  → not interested
+    final r = (hPct / 40).clamp(0.0, 1.0); //  dragging right → read
+    final u = (-vPct / 40).clamp(0.0, 1.0); // dragging up    → open
+    final d = (vPct / 40).clamp(0.0, 1.0); //  dragging down  → save
+    // A diagonal drag resolves to a single axis: whichever of horizontal /
+    // vertical dominates shows its cue, the other is suppressed. Ties fall to
+    // horizontal (the two most common gestures, reject/read).
+    final horiz = math.max(l, r);
+    final vert = math.max(u, d);
+    final left = horiz >= vert ? l : 0.0;
+    final right = horiz >= vert ? r : 0.0;
+    final up = vert > horiz ? u : 0.0;
+    final down = vert > horiz ? d : 0.0;
 
     return IgnorePointer(
       child: ClipRRect(
@@ -262,18 +292,25 @@ class _SwipeCues extends StatelessWidget {
             if (left > 0)
               _cueScrim(context, bite.danger, left,
                   alignment: Alignment.topRight,
-                  child: _cueBadge('SKIP', Icons.close, bite.danger, left,
+                  child: _cueBadge('NOT INTERESTED', Icons.close_rounded,
+                      bite.danger, left,
                       angle: 0.12)),
             if (right > 0)
               _cueScrim(context, bite.accent, right,
                   alignment: Alignment.topLeft,
-                  child: _cueBadge('SAVE', Icons.bookmark, bite.accent, right,
+                  child: _cueBadge(
+                      'READ', Icons.check_circle_rounded, bite.accent, right,
                       angle: -0.12)),
-            if (upOnly > 0)
-              _cueScrim(context, bite.ink, upOnly,
+            if (down > 0)
+              _cueScrim(context, bite.ink, down,
+                  alignment: Alignment.topCenter,
+                  child: _cueBadge(
+                      'SAVE', Icons.bookmark_add_rounded, bite.ink, down)),
+            if (up > 0)
+              _cueScrim(context, bite.accent, up,
                   alignment: Alignment.bottomCenter,
-                  child:
-                      _cueBadge('READ', Icons.arrow_upward, bite.ink, upOnly)),
+                  child: _cueBadge(
+                      'OPEN', Icons.open_in_full_rounded, bite.accent, up)),
           ],
         ),
       ),

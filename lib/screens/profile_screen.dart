@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/article.dart';
+import '../models/country.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bite_tab_bar.dart';
@@ -100,6 +101,26 @@ class ProfileScreen extends StatelessWidget {
                   selected: state.selectedCategories.isEmpty ||
                       state.selectedCategories.contains(c),
                   onTap: () => state.toggleCategory(c),
+                ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text('YOUR REGION', style: caps(size: 11, color: bite.muted)),
+          const SizedBox(height: 4),
+          Text(
+            'A mild nudge toward coverage from your part of the world.',
+            style: sans(size: 12.5, color: bite.muted),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final c in Country.values)
+                TopicPill(
+                  label: c.label,
+                  selected: state.country == c,
+                  onTap: () => state.setCountry(c),
                 ),
             ],
           ),

@@ -20,19 +20,24 @@ void main() {
     await tester.tap(find.textContaining('Continue with 2'));
     await tester.pumpAndSettle();
 
+    // Dismiss the first-run gesture coach-mark, which otherwise sits over the
+    // deck and absorbs swipes.
+    state.markGestureTutorialSeen();
+    await tester.pumpAndSettle();
+
     // Feed shows a card stack filtered to the picked topics.
     expect(find.byType(ArticleCard), findsWidgets);
     final deckSize = state.deck.length;
     expect(state.deck.every((a) => ['Tech', 'World'].contains(a.category.label)),
         isTrue);
 
-    // Swipe right → saves the top card.
+    // Phase 11 gesture model: swipe DOWN → saves the top card.
     final topCard = state.deck.first;
-    await tester.drag(find.byType(ArticleCard).first, const Offset(400, 0));
+    await tester.drag(find.byType(ArticleCard).first, const Offset(0, 400));
     await tester.pumpAndSettle();
     expect(state.isSaved(topCard), isTrue);
 
-    // Swipe left → dismisses the next card.
+    // Swipe left → dismisses (rejects) the next card.
     final second = state.deck.first;
     await tester.drag(find.byType(ArticleCard).first, const Offset(-400, 0));
     await tester.pumpAndSettle();
