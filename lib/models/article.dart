@@ -15,7 +15,11 @@ enum Category {
 /// Where an article came from. Determines licensing: only Guardian (and
 /// bundled mock) content may be rendered in the native reader; everything
 /// else opens at the source.
-enum ArticleProvider { guardian, newsdata, mock }
+///
+/// [rss] is a Phase 14 publisher-direct story. These are LINK-OUT ONLY — Bite
+/// is a referrer, not a replacement — so they always arrive with
+/// [Article.hasFullText] false and route to the in-app browser.
+enum ArticleProvider { guardian, newsdata, rss, mock }
 
 /// Cover art palette. Used as the card background while a cover image loads,
 /// and as the cover itself when a story has no image.

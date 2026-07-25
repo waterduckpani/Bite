@@ -49,6 +49,13 @@ class _FeedScreenState extends State<FeedScreen> {
         _deck.length - previousIndex <= 5) {
       state.refreshFeed();
     }
+    // Phase 14 impression: the card that has just become the top of the deck
+    // is the one actually being shown. The back card peeking behind it is
+    // built by cardBuilder too, which is exactly why impressions are not
+    // logged from there.
+    if (currentIndex != null && currentIndex < _deck.length) {
+      state.recordImpression(_deck[currentIndex]);
+    }
     switch (direction) {
       case CardSwiperDirection.left:
         // Not interested. The only negative signal.
@@ -95,6 +102,14 @@ class _FeedScreenState extends State<FeedScreen> {
       _epoch = state.deckEpoch;
       _deck = state.deck;
       _finished = _deck.isEmpty;
+      // The first card of a rebuilt deck never goes through onSwipe, so its
+      // impression is logged here. Deferred off the build phase because
+      // recordImpression queues a write.
+      if (_deck.isNotEmpty) {
+        final first = _deck.first;
+        WidgetsBinding.instance.addPostFrameCallback(
+            (_) => state.recordImpression(first));
+      }
     }
 
     final padding = MediaQuery.paddingOf(context);

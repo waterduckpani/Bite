@@ -75,12 +75,15 @@ keep a Postgres table of articles fresh, and the app reads a single
 personalized RPC:
 
 ```
-                Guardian API
-                     │
-   (*/30 cron)  ┌────▼─────────┐   articles + tags
-                │  ingest-news │──────────────┐
-                └──────────────┘              │
-                                              ▼
+                Guardian API            publisher RSS feeds
+                     │                          │
+   (*/30 cron)  ┌────▼─────────┐   (:20 /3h) ┌──▼─────────┐
+                │  ingest-news │             │ ingest-rss │
+                └──────┬───────┘             └──────┬─────┘
+                       │      articles + tags       │
+                       └───────────┬────────────────┘
+                                   │
+                                   ▼
    (:05,:35)    ┌──────────────┐        ┌───────────┐
                 │    embed     │◀───────│  Postgres │
                 │  (pgvector)  │        │ + pgvector│
@@ -100,15 +103,22 @@ personalized RPC:
 
 1. **`ingest-news`** pulls fresh stories from The Guardian (sections + keyword
    tags), deduplicates them, and upserts them with the service role.
-2. **`embed`** turns each new article into a vector embedding (`gte-small`) via
+2. **`ingest-rss`** reads the enabled publishers' RSS feeds under a published
+   bot policy — robots.txt honoured, one honest User-Agent, a round-robin fair
+   share so no single outlet crowds the run — and normalises them into the same
+   table, link-out only.
+3. **`embed`** turns each new article into a vector embedding (`gte-small`) via
    pg_net-triggered, self-chaining batches — this is what powers similarity.
-3. **`summarize-articles`** fetches the full text and calls an LLM
-   (via OpenRouter, with a fallback model chain) to produce the Bite-voice hook
-   and summary. A failed summary falls back gracefully to the standfirst.
-4. **`match-trackers`** scores fresh articles against each story tracker using a
-   hybrid of tag-Jaccard and embedding cosine similarity, and attaches matches
-   to the tracker's timeline.
-5. **`get_personalized_feed`** is a single Postgres RPC that assembles the deck:
+4. **`summarize-articles`** calls an LLM (via OpenRouter, with a fallback model
+   chain) to produce the Bite-voice hook and summary — from the full body where
+   Bite holds one, otherwise from the publisher's own description. Output is
+   capped at 80 words in code and metered against a global daily ceiling. A
+   failed summary falls back gracefully to the standfirst.
+5. **`match-trackers`** scores fresh articles against each story tracker using a
+   hybrid of tag-Jaccard and embedding cosine similarity — falling back to an
+   embedding-only path with its own threshold when either side has no tags, so
+   publisher-direct stories can match too.
+6. **`get_personalized_feed`** is a single Postgres RPC that assembles the deck:
    taste similarity + category affinity + recency, minus the topic penalty,
    plus a mild country nudge, with the exploration slice interleaved via
    collision-free slot math.
@@ -116,14 +126,45 @@ personalized RPC:
 All of this runs behind Row-Level Security — every user sees only their own
 saves, swipes, preferences, and trackers.
 
+### Publisher-direct sources: a referrer, not a replacement
+
+Alongside Guardian, Bite reads a small, version-controlled registry of
+publisher RSS feeds (`ingest-rss`, every three hours). The governing rule is
+that **Bite is a referrer, not a replacement**, and the design makes that
+structural rather than aspirational:
+
+- **Attribution can't be dropped.** Publisher name and canonical URL are
+  required columns; a card cannot render without them.
+- **Every publisher-direct story is link-out only.** `full_text_available` is
+  written `false` unconditionally, so the reader router always sends these to
+  the publisher's own page — their layout, their branding, their advertising.
+- **The bite informs, it doesn't complete.** Summaries are capped at **80 words
+  in code**, not merely in the prompt.
+- **Nothing is circumvented.** One fixed, honest User-Agent
+  (`BiteNewsBot/1.0`), `robots.txt` parsed and honoured per domain including
+  `Crawl-delay`, and any paywall, consent wall or bot challenge aborts the
+  fetch and falls back to the feed's own description. Nothing is ever retried
+  with different headers. See [`docs/bot/`](docs/bot/index.html).
+- **It's measured.** `referral_events` records impressions and link-outs so
+  per-publisher click-through rate is a number we can produce, not a claim.
+
+No publisher is added on assumption: `tools/qualify_publisher.dart` checks the
+feed, robots.txt, content depth, categories and volume for each candidate, and
+its report is committed under [`docs/publishers/`](docs/publishers/) — that
+directory also records the slate's political spread and, honestly, where it is
+still skewed.
+
 ### Reading a story
 
 Tapping (or swiping up) opens the reader. Bite keeps a hard licensing boundary:
 
-- **Full-text sources** render natively in-app, with a sage-tinted **"The Bite"**
-  summary block above the original article body.
-- **Headline-only sources** open the publisher's own page in an in-app browser —
-  Bite never re-hosts content it isn't licensed to show.
+- **Full-text sources** (Guardian) render natively in-app, with a sage-tinted
+  **"The Bite"** summary block above the original article body.
+- **Everything else** — headline-only sources and every publisher-direct story
+  — opens the publisher's own page in an in-app browser. Bite never re-hosts
+  content it isn't licensed to show, and those cards carry a persistent
+  *"Swipe up to read at {publisher}"* cue so the destination is never a
+  surprise.
 
 Article bodies are proxied and cached server-side (`guardian-body`) so the app
 bundle never carries a news-API key.
@@ -151,8 +192,9 @@ Flutter (iOS-first)
 
 Supabase
 ├─ Postgres        articles, profiles, saves, swipe_events, category_prefs,
-│                  story_trackers, tracker_articles  (+ pgvector, RLS everywhere)
-├─ Edge Functions  ingest-news · embed · summarize-articles ·
+│                  story_trackers, tracker_articles, publishers,
+│                  referral_events  (+ pgvector, RLS everywhere)
+├─ Edge Functions  ingest-news · ingest-rss · embed · summarize-articles ·
 │                  match-trackers · guardian-body
 └─ Scheduling      pg_cron pipelines: ingest → embed/summarize → match → purge
 ```
@@ -182,7 +224,8 @@ Supabase
 **AI** · sentence embeddings (`gte-small`) for taste & tracker matching · LLM
 summarization via OpenRouter (Gemini Flash family, with a fallback chain)
 
-**Content** · The Guardian Open Platform (licensed full text)
+**Content** · The Guardian Open Platform (licensed full text) · publisher RSS
+feeds, link-out only, under a published bot policy
 
 ---
 
@@ -201,8 +244,18 @@ lib/
 └─ widgets/       article card, tab bar, gesture tutorial, glass, cover art …
 
 supabase/
-└─ functions/     ingest-news · embed · summarize-articles ·
-                  match-trackers · guardian-body
+├─ functions/     ingest-news · ingest-rss · embed · summarize-articles ·
+│                 match-trackers · guardian-body
+│                 _shared/  bot identity + robots.txt · RSS parsing ·
+│                           junk filter · the 80-word cap
+└─ migrations/    (kept local — see note below)
+
+tools/            qualify_publisher.dart  publisher vetting (Dart, standalone)
+                  verify_phase14.ts       robots/cap/parser checks (Deno)
+
+docs/
+├─ publishers/    one qualification report per candidate + the slate rationale
+└─ bot/           the public BiteNewsBot page (User-Agent's +url)
 
 test/             widget/flow tests
 ```
@@ -228,12 +281,55 @@ cron schedule are deployed separately via the Supabase CLI.
 
 ---
 
+## Operating the publisher registry
+
+**Removing a publisher — the one query to know.** It takes effect on the next
+ingest cycle *and* immediately hides their existing cards from every reader's
+feed and tracker timeline, because `get_personalized_feed` joins the registry
+on every read:
+
+```sql
+update public.publishers set enabled = false where id = 'thehindu';
+```
+
+Nothing is deleted. Saved articles, swipe history and tracker rows are all left
+intact — deleting would cascade into users' bookmarks and the recommender's
+training data. Re-enabling restores the timeline exactly as it was.
+
+Enabling works the same way (publishers are seeded **disabled** on purpose —
+adding a row and turning it on are two different decisions):
+
+```sql
+update public.publishers set enabled = true
+ where id in ('thehindu', 'deccanherald', 'scroll', 'aljazeera');
+```
+
+**The click-through report.** This is the number that goes into a publisher
+email — impressions, link-outs, CTR %, and how many distinct readers were sent
+their way:
+
+```sql
+select * from public.publisher_ctr(now() - interval '30 days', now());
+```
+
+**Adding a publisher.** Qualify first, commit the report, then add the row:
+
+```bash
+dart run tools/qualify_publisher.dart example.com   # writes docs/publishers/
+```
+
+**Checking the AI spend** is real rather than assumed:
+
+```sql
+select * from public.ai_usage_daily order by day desc limit 14;
+```
+
 ## Status
 
 Bite is a personal project built in phases — design system and motion, live
 content, Supabase persistence, authentication, a pgvector recommendation
-engine, server-side ingestion, AI summaries, the four-gesture swipe rework, and
-story trackers. It is a functional, end-to-end iOS app, not a shipped App Store
+engine, server-side ingestion, AI summaries, the four-gesture swipe rework,
+story trackers, and publisher-direct ingestion with click-through reporting. It is a functional, end-to-end iOS app, not a shipped App Store
 product.
 
 ---

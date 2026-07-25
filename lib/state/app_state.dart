@@ -76,7 +76,13 @@ class AppState extends ChangeNotifier {
     final data = await repo.hydrate();
     if (data != null) {
       onboarded = onboarded || data.onboarded;
-      _seenTutorialVersion = data.seenTutorialVersion;
+      // Never regress a local acknowledgement: hydration can land after the
+      // user has already dismissed the coach-mark (or after the dev
+      // skip-tutorial flag set it), and overwriting would pop it back up.
+      _seenTutorialVersion =
+          data.seenTutorialVersion > _seenTutorialVersion
+              ? data.seenTutorialVersion
+              : _seenTutorialVersion;
       selectedCategories
         ..clear()
         ..addAll(data.categories);
@@ -222,10 +228,16 @@ class AppState extends ChangeNotifier {
 
   /// Marks the current gesture tutorial as seen (persisted), so it won't
   /// re-show until [FeedConfig.gestureTutorialVersion] is bumped.
-  void markGestureTutorialSeen() {
+  ///
+  /// [persist] is false for the dev skip-tutorial flag, so a dev boot never
+  /// writes the acknowledgement to the real profile — same discipline as
+  /// [completeOnboarding].
+  void markGestureTutorialSeen({bool persist = true}) {
     if (_seenTutorialVersion >= FeedConfig.gestureTutorialVersion) return;
     _seenTutorialVersion = FeedConfig.gestureTutorialVersion;
-    _repo?.setGestureTutorialSeen(FeedConfig.gestureTutorialVersion);
+    if (persist) {
+      _repo?.setGestureTutorialSeen(FeedConfig.gestureTutorialVersion);
+    }
     notifyListeners();
   }
 
@@ -269,6 +281,31 @@ class AppState extends ChangeNotifier {
   /// most once per card.
   void openCard(Article a) {
     if (_openedIds.add(a.id)) _repo?.recordSwipe(a, 'opened');
+    // Phase 14: opening a link-out story IS the referral — the reader is being
+    // handed to the publisher's own page. Full-text stories open in Bite's
+    // native reader, so they are not a link-out and are not counted as one.
+    if (!a.hasFullText) recordLinkOut(a);
+  }
+
+  // -- Referral instrumentation (Phase 14, Part F) ---------------------------
+  // Impressions and link-outs feed the per-publisher CTR report — the number
+  // that goes into a publisher email. Both are deduped per session so a card
+  // returned to after an open can't inflate either count.
+
+  final Set<String> _impressionIds = {};
+  final Set<String> _linkOutIds = {};
+
+  /// Logged when a card is ACTUALLY the top of the deck — not when it is built
+  /// as the peeking back card, and not when the deck is prefetched. An inflated
+  /// impression count would deflate CTR and make the referral claim look worse
+  /// than it is; a missed one would flatter it. Both are wrong, so this fires
+  /// exactly once per card per session.
+  void recordImpression(Article a) {
+    if (_impressionIds.add(a.id)) _repo?.recordReferral(a.id, 'impression');
+  }
+
+  void recordLinkOut(Article a) {
+    if (_linkOutIds.add(a.id)) _repo?.recordReferral(a.id, 'linkout');
   }
 
   void dismiss(Article a) {
@@ -444,6 +481,9 @@ class AppState extends ChangeNotifier {
     _dismissedIds.clear();
     _readIds.clear();
     _openedIds.clear();
+    // A different user seeing the same card is a genuinely new impression.
+    _impressionIds.clear();
+    _linkOutIds.clear();
     _trackers.clear();
     _repo.setOnboarded();
     _repo.replaceCategoryPrefs(selectedCategories);
@@ -461,6 +501,8 @@ class AppState extends ChangeNotifier {
     _dismissedIds.clear();
     _readIds.clear();
     _openedIds.clear();
+    _impressionIds.clear();
+    _linkOutIds.clear();
     _trackers.clear();
     deckEpoch++;
   }
