@@ -498,6 +498,23 @@ class UserDataRepository {
     });
   }
 
+  /// Records a Phase 14 referral event: `impression` when a card is actually
+  /// shown, `linkout` when the reader taps or swipes through to the publisher.
+  ///
+  /// The publisher is resolved SERVER-SIDE from the article row, so the client
+  /// never sends (and cannot forge) attribution. Guardian, mock and unknown
+  /// articles are ignored by the RPC — there is no publisher to credit.
+  ///
+  /// This is what makes "Bite is a referrer, not a replacement" a measurable
+  /// claim rather than a stated one: it is the input to the per-publisher CTR
+  /// report. Queued like every other write, so it survives being offline.
+  void recordReferral(String articleId, String eventType) {
+    _enqueue(() => _client.rpc('record_referral', params: {
+          'p_article_id': articleId,
+          'p_event_type': eventType,
+        }));
+  }
+
   /// Feed resets move a watermark instead of deleting swipe history:
   /// hydration only counts left-swipes newer than this.
   void recordFeedReset() {

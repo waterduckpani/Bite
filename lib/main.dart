@@ -28,6 +28,13 @@ Future<void> main() async {
   if (const bool.fromEnvironment('BITE_SKIP_ONBOARDING')) {
     state.completeOnboarding({}, persist: false);
   }
+  // Dev convenience: `--dart-define=BITE_SKIP_TUTORIAL=true` suppresses the
+  // first-run gesture coach-mark, which otherwise covers the deck on every
+  // fresh install. Screenshot-only — the simulator has no tap tooling here,
+  // and this never persists, so the real profile still sees the tutorial.
+  if (const bool.fromEnvironment('BITE_SKIP_TUTORIAL')) {
+    state.markGestureTutorialSeen(persist: false);
+  }
   // Both fire-and-forget: hydration and content land whenever the network
   // answers; the UI never blocks on either.
   state.hydrate();
@@ -64,7 +71,7 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  /// Dev convenience: `--dart-define=BITE_AUTO_OPEN=guardian|newsdata|mock`
+  /// Dev convenience: `--dart-define=BITE_AUTO_OPEN=guardian|newsdata|rss|mock`
   /// opens the first matching story once content arrives, for simulator
   /// verification without tap tooling.
   static const _autoOpen = String.fromEnvironment('BITE_AUTO_OPEN');
@@ -162,6 +169,9 @@ class _RootState extends State<_Root> {
       final provider = switch (_autoOpen) {
         'guardian' => ArticleProvider.guardian,
         'newsdata' => ArticleProvider.newsdata,
+        // Phase 14 link-out story: exercises the browser route rather than
+        // the native reader, since these are never rendered in-app.
+        'rss' => ArticleProvider.rss,
         _ => ArticleProvider.mock,
       };
       // Saved stories first: they hydrate body-less from Supabase, so this

@@ -25,6 +25,12 @@ class ArticleCard extends StatelessWidget {
     final hasSummary = article.hasSummary;
     final leadLine = hasSummary ? article.aiSummaryHook! : article.headline;
     final bodyLine = hasSummary ? article.aiSummary! : article.snippet;
+    // Link-out cards spend a row on the persistent "Swipe up to read at …"
+    // cue, so the text above it gets one line less each. Without this the
+    // headline is handed less height than its maxLines needs and hard-CLIPS
+    // mid-word instead of ellipsising — Text only ellipsises at maxLines, not
+    // at the height it was actually given.
+    final textLines = article.hasFullText ? 3 : 2;
     return Container(
       decoration: BoxDecoration(
         color: bite.card,
@@ -86,7 +92,7 @@ class ArticleCard extends StatelessWidget {
                           type: MaterialType.transparency,
                           child: Text(
                             leadLine,
-                            maxLines: 3,
+                            maxLines: textLines,
                             overflow: TextOverflow.ellipsis,
                             style:
                                 display(size: 26, weight: 560, height: 1.14),
@@ -99,16 +105,26 @@ class ArticleCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       bodyLine,
-                      maxLines: 3,
+                      maxLines: textLines,
                       overflow: TextOverflow.ellipsis,
                       style: sans(size: 13.5, height: 1.5, color: bite.muted),
                     ),
                   ),
+                  // Phase 14: link-out stories carry a persistent, prominent
+                  // route to the publisher directly under the bite. Full-text
+                  // stories keep the compact "Read in Bite" pill in the source
+                  // row below instead.
+                  if (!article.hasFullText) ...[
+                    LinkOutCue(article: article),
+                    const SizedBox(height: 10),
+                  ],
                   Row(
                     children: [
                       Expanded(child: SourceMark(article: article)),
-                      const SizedBox(width: 8),
-                      ReaderCue(article: article),
+                      if (article.hasFullText) ...[
+                        const SizedBox(width: 8),
+                        ReaderCue(article: article),
+                      ],
                     ],
                   ),
                 ],

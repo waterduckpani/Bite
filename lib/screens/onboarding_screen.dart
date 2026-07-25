@@ -49,6 +49,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 "Pick a few topics and we'll build your daily stack.\nYou can always change these later.",
                 style: sans(size: 14, color: bite.muted, height: 1.45),
               ),
+              const SizedBox(height: 10),
+              // Phase 14: say plainly what a bite is and isn't. Bite writes a
+              // short summary and then sends you to the publisher — the reader
+              // should know that before the first card, not discover it.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(Icons.arrow_upward_rounded,
+                        size: 15, color: bite.accent),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Every story is a short summary. Swipe up to read the '
+                      'original at the publisher.',
+                      style: sans(size: 13, color: bite.muted, height: 1.45),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 24),
               Expanded(
                 child: SingleChildScrollView(

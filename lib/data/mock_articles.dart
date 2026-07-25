@@ -15,6 +15,36 @@ const _fillD =
 typedef _A = Article;
 
 final List<Article> mockArticles = [
+  // -- Phase 14: link-out stories -------------------------------------------
+  // Publisher-direct cards, the shape ingest-rss produces. hasFullText is
+  // false, so these route to the in-app browser and the card shows the
+  // persistent "Swipe up to read at {publisher}" cue instead of the "Read in
+  // Bite" pill. They carry NO body: Bite is a referrer, not a replacement, and
+  // a publisher's article is never rendered natively.
+  //
+  // Bundled so the keyless mock build still exercises the link-out card in
+  // both themes — without one, the Phase 14 UI is unreachable without a
+  // deployed backend and an enabled publisher.
+  const _A(
+    id: 'a16',
+    headline: 'Monsoon shortfall pushes three states to ration irrigation water',
+    source: 'Deccan Herald',
+    author: 'Deccan Herald',
+    category: Category.world,
+    imageUrl: '',
+    snippet:
+        'Reservoir levels are the lowest in eleven years, and the rationing order runs until the winter crop is sown.',
+    timeAgo: '3h ago',
+    url: 'https://www.deccanherald.com/india/monsoon-shortfall-irrigation',
+    readMinutes: 3,
+    palette: rustPalette,
+    provider: ArticleProvider.rss,
+    hasFullText: false,
+    aiSummaryHook: 'Three states ration irrigation water after weak monsoon',
+    aiSummary:
+        'Three states have ordered irrigation rationing after the monsoon delivered well below its usual rainfall, leaving reservoirs at their lowest level in eleven years. Officials said the limits will hold until the winter crop is sown. Farming groups have asked for compensation.',
+    body: [],
+  ),
   const _A(
     id: 'a01',
     headline: 'The quiet chip war reshaping who controls the future of AI',
@@ -320,5 +350,25 @@ final List<Article> mockArticles = [
       _fillB,
       _fillD,
     ],
+  ),
+  const _A(
+    id: 'a17',
+    headline: 'Regulators open inquiry into undersea cable outage',
+    source: 'Al Jazeera',
+    author: 'Al Jazeera',
+    category: Category.tech,
+    imageUrl: '',
+    snippet:
+        'Four operators reported simultaneous faults on a route that carries most of the region\'s international traffic.',
+    timeAgo: '5h ago',
+    url: 'https://www.aljazeera.com/news/undersea-cable-inquiry',
+    readMinutes: 2,
+    palette: tealPalette,
+    provider: ArticleProvider.rss,
+    hasFullText: false,
+    aiSummaryHook: 'Inquiry opened into simultaneous undersea cable faults',
+    aiSummary:
+        'Regulators have opened an inquiry after four operators reported faults on the same undersea route within a day, disrupting international traffic for several hours. The operators said repairs are under way. The regulator did not say whether it suspects deliberate damage.',
+    body: [],
   ),
 ];
