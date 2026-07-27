@@ -56,6 +56,8 @@ class SavedTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${article.source}  ·  ${article.timeAgo}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: sans(size: 11.5, color: bite.muted),
                     ),
                   ],
