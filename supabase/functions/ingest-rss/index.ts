@@ -77,6 +77,19 @@ const MAX_ITEM_AGE_HOURS = 48;
 /// RSS copy filed later.
 const DEDUP_WINDOW_HOURS = 72;
 
+/// Consecutive walled/refused body fetches after which a publisher is treated
+/// as description-only and stops being probed at all.
+///
+/// robots.txt allowing a path does NOT mean the page is served to us: several
+/// publishers permit our crawler and then return a paywall. detectWall already
+/// aborts each attempt, so nothing unlicensed is ever stored — but without this
+/// we would keep asking on every run, forever, which is a request pattern a
+/// publisher would reasonably object to seeing in their logs. Backing off is
+/// the opposite of circumvention: it is taking "no" for an answer and
+/// remembering it. Any successful fetch resets the streak, so a publisher that
+/// drops its paywall is picked up again automatically.
+const BODY_WALL_BACKOFF = 3;
+
 /// Title-token Jaccard at or above which two stories are "the same story".
 /// Same value and same tokeniser as ingest-news, so the two functions agree.
 const DEDUP_JACCARD = 0.5;
@@ -169,6 +182,24 @@ const OPINION_URL_PATHS = [
 const OPINION_CATEGORY_RE =
   /\b(opinion|opinions|editorial|editorials|op-?ed|column|columns|columnist|blog|blogs|voices|commentary|letters to the editor)\b/i;
 
+/// Some publishers label opinion ONLY in the headline. Scroll.in is the case
+/// that exposed this: "Opinion: The Modi government doesn't understand Gen Z"
+/// carries no <category> at all and lives under /article/<id>/opinion-… , so
+/// neither the category rule nor the path rule above catches it.
+///
+/// ANCHORED at the start and requiring a separator, deliberately. A bare
+/// "opinion" anywhere in a headline is common in real reporting ("opinion
+/// polls suggest…", "the court gave its opinion"), and dropping those would be
+/// exactly the over-filtering Phase 9 warns against. "Opinion: …" as a prefix
+/// is unambiguous; nothing else here is.
+///
+/// NOT attempted: columnist bylines like "Ramachandra Guha: …". Detecting
+/// those generically needs a "Firstname Lastname:" pattern, which also matches
+/// legitimate headlines ("Donald Trump: I will…"). That would trade a small
+/// gain for a large false-positive risk, so those slip through by design.
+const OPINION_TITLE_RE =
+  /^\s*(opinion|comment|commentary|analysis|editorial|column|viewpoint|perspective)\s*[:–—-]/i;
+
 function opinionMatch(
   item: RssItem,
   url: string,
@@ -181,6 +212,10 @@ function opinionMatch(
   }
   for (const segment of OPINION_URL_PATHS) {
     if (path.includes(segment)) return { kind: "url_path", rule: segment };
+  }
+  const titleMatch = OPINION_TITLE_RE.exec(item.title);
+  if (titleMatch) {
+    return { kind: "title_prefix", rule: `${titleMatch[1].toLowerCase()}:` };
   }
   for (const category of item.categories) {
     const m = OPINION_CATEGORY_RE.exec(category);
@@ -226,6 +261,7 @@ interface Publisher {
   robots_crawl_delay: number | null;
   robots_rules: { allow: boolean; pattern: string }[];
   max_per_run: number;
+  body_wall_streak: number;
 }
 
 // -- Dedup ------------------------------------------------------------------
@@ -257,8 +293,13 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 // -- robots.txt refresh -----------------------------------------------------
 
 /// Returns the publisher's robots rules, refetching when the cache is older
-/// than ROBOTS_CACHE_HOURS. Also re-derives full_text_allowed: it is set ONLY
-/// from robots.txt, never by hand.
+/// than ROBOTS_CACHE_HOURS.
+///
+/// It deliberately does NOT set full_text_allowed. That verdict needs a real
+/// article path to test, which only exists once the feed has been parsed — see
+/// deriveFullTextAllowed below. An earlier version tested a hardcoded
+/// "/article/" here and consequently granted permission to every publisher,
+/// because essentially no robots.txt disallows that placeholder.
 async function refreshRobots(
   supabase: Db,
   publisher: Publisher,
@@ -288,30 +329,55 @@ async function refreshRobots(
     robots = await fetchRobots(apex);
   }
 
-  // full_text_allowed is a DERIVED value: a representative article path under
-  // the publisher's own domain must be allowed for our named bot. When
-  // robots.txt could not be read at all we do not grant permission.
-  const representative = `/article/`;
-  const allowed = robots.fetched && robotsAllows(robots, representative);
-
   await supabase
     .from("publishers")
     .update({
       robots_checked_at: new Date().toISOString(),
       robots_crawl_delay: robots.crawlDelaySeconds,
       robots_rules: robots.rules,
-      full_text_allowed: allowed,
     })
     .eq("id", publisher.id);
 
-  publisher.full_text_allowed = allowed;
   publisher.robots_crawl_delay = robots.crawlDelaySeconds;
   log.push(
     `[ingest-rss] robots publisher=${publisher.id} status=${robots.status}` +
       ` group=${robots.groupUsed} rules=${robots.rules.length}` +
-      ` crawlDelay=${robots.crawlDelaySeconds ?? "-"} full_text_allowed=${allowed}`,
+      ` crawlDelay=${robots.crawlDelaySeconds ?? "-"}`,
   );
   return robots;
+}
+
+/// full_text_allowed, derived ONLY from robots.txt — but against a REAL
+/// article path taken from the publisher's own feed, which is the only way the
+/// answer means anything. Mirrors tools/qualify_publisher.dart.
+///
+/// When robots.txt could not be read at all, permission is not granted.
+async function deriveFullTextAllowed(
+  supabase: Db,
+  publisher: Publisher,
+  robots: Robots,
+  sampleUrl: string | null,
+  log: string[],
+): Promise<void> {
+  if (!sampleUrl) return;
+  let path: string;
+  try {
+    path = new URL(sampleUrl).pathname;
+  } catch {
+    return;
+  }
+  const allowed = robots.fetched && robotsAllows(robots, path);
+  if (allowed === publisher.full_text_allowed) return;
+
+  await supabase
+    .from("publishers")
+    .update({ full_text_allowed: allowed })
+    .eq("id", publisher.id);
+  publisher.full_text_allowed = allowed;
+  log.push(
+    `[ingest-rss] full_text_allowed publisher=${publisher.id} -> ${allowed}` +
+      ` (robots verdict on real path ${path})`,
+  );
 }
 
 // -- Per-publisher fetch + normalise ----------------------------------------
@@ -433,6 +499,16 @@ async function fetchPublisher(
 
   // Phase 9 junk filter, unchanged and shared with ingest-news.
   run.candidates = filterJunk(rows, junk, "ingest-rss");
+
+  // NOW we have real article URLs, so the robots verdict on article paths can
+  // actually be evaluated. This is what full_text_allowed is derived from.
+  await deriveFullTextAllowed(
+    supabase,
+    publisher,
+    run.robots,
+    run.candidates[0]?.original_url ?? rows[0]?.original_url ?? null,
+    log,
+  );
   return run;
 }
 
@@ -533,7 +609,7 @@ Deno.serve(async (req) => {
     .from("publishers")
     .select(
       "id, name, canonical_domain, rss_url, full_text_allowed, robots_checked_at," +
-        " robots_crawl_delay, robots_rules, max_per_run",
+        " robots_crawl_delay, robots_rules, max_per_run, body_wall_streak",
     )
     .eq("enabled", true)
     .order("id");
@@ -651,6 +727,9 @@ Deno.serve(async (req) => {
   //    only where the RSS did not already carry the full article.
   const bodies: { article_id: string; body: string }[] = [];
   const bodySkips: Record<string, number> = {};
+  // Per-publisher wall backoff, accumulated across this run and written once.
+  const wallStreak = new Map<string, number>();
+  const wallReason = new Map<string, string>();
   for (const { row, run } of selected) {
     const item = run.items.get(row.id);
     if (!item) continue;
@@ -664,6 +743,13 @@ Deno.serve(async (req) => {
       bodySkips["not_allowed"] = (bodySkips["not_allowed"] ?? 0) + 1;
       continue;
     }
+    // This publisher has refused us BODY_WALL_BACKOFF times running. robots
+    // permits the path, but the page behind it is walled, so we stop asking
+    // and treat them as description-only. Not a workaround — the opposite.
+    if ((run.publisher.body_wall_streak ?? 0) >= BODY_WALL_BACKOFF) {
+      bodySkips["backed_off"] = (bodySkips["backed_off"] ?? 0) + 1;
+      continue;
+    }
     const result = await fetchBody(
       row,
       run.robots,
@@ -672,9 +758,39 @@ Deno.serve(async (req) => {
     );
     if ("body" in result) {
       bodies.push({ article_id: row.id, body: result.body });
+      wallStreak.set(run.publisher.id, 0);   // served honestly — reset
     } else {
       const kind = result.skipped.split(":")[0];
       bodySkips[kind] = (bodySkips[kind] ?? 0) + 1;
+      // robots_disallow is a rules verdict, not a refusal by the server, so it
+      // does not count toward the wall streak.
+      if (kind !== "robots_disallow") {
+        wallStreak.set(
+          run.publisher.id,
+          (wallStreak.get(run.publisher.id) ?? run.publisher.body_wall_streak ?? 0) + 1,
+        );
+        wallReason.set(run.publisher.id, result.skipped);
+      }
+    }
+  }
+
+  // Persist the backoff state. A publisher that starts serving us again resets
+  // to 0 and is picked back up on the next run with no manual intervention.
+  for (const [publisherId, streak] of wallStreak) {
+    const reason = wallReason.get(publisherId) ?? null;
+    await supabase
+      .from("publishers")
+      .update({
+        body_wall_streak: streak,
+        body_wall_reason: streak === 0 ? null : reason,
+        body_wall_last_at: streak === 0 ? null : new Date().toISOString(),
+      })
+      .eq("id", publisherId);
+    if (streak >= BODY_WALL_BACKOFF) {
+      log.push(
+        `[ingest-rss] backing off publisher=${publisherId} after ${streak}` +
+          ` consecutive refusals (last: ${reason}) — description-only from now on`,
+      );
     }
   }
 

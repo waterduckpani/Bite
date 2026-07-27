@@ -35,13 +35,24 @@ class SourceMark extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          article.source,
-          style: sans(size: 12.5, weight: FontWeight.w600, color: ink),
+        // Flexible + ellipsis: Phase 14 publisher names are far longer than
+        // "The Guardian" ("The Christian Science Monitor"), and an unbounded
+        // Text here overflows the row on narrower cards. The name gives way
+        // before the timestamp, which is short and fixed.
+        Flexible(
+          child: Text(
+            article.source,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: sans(size: 12.5, weight: FontWeight.w600, color: ink),
+          ),
         ),
         const SizedBox(width: 6),
         Text(
           '·  ${article.timeAgo}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: sans(size: 12.5, color: bite.muted),
         ),
       ],

@@ -147,6 +147,14 @@ class _TrackerRow extends StatelessWidget {
                           Icon(Icons.notifications_off,
                               size: 15, color: bite.faint),
                           const SizedBox(width: 6),
+                        ]
+                        // A story that has gone quiet gets a marker here and a
+                        // full prompt inside. Marker only — Bite suggests
+                        // unfollowing, it never does it for you.
+                        else if (tracker.isStale) ...[
+                          Icon(Icons.history_toggle_off,
+                              size: 15, color: bite.faint),
+                          const SizedBox(width: 6),
                         ],
                         Expanded(
                           child: Text(
@@ -211,6 +219,10 @@ class _TrackerRow extends StatelessWidget {
 
   String _metaLine(StoryTracker t) {
     final count = '${t.articleCount} ${t.articleCount == 1 ? 'story' : 'stories'}';
+    // A quiet story says so plainly, in place of a timestamp that would read
+    // as activity ("2 stories · 12 days ago" invites a second look; "quiet for
+    // 12 days" says what it means).
+    if (t.isStale) return '$count  ·  quiet for ${t.daysQuiet} days';
     final at = t.latestAt;
     if (at == null) return count;
     return '$count  ·  ${relativeTime(at)}';

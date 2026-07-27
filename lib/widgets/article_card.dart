@@ -25,12 +25,21 @@ class ArticleCard extends StatelessWidget {
     final hasSummary = article.hasSummary;
     final leadLine = hasSummary ? article.aiSummaryHook! : article.headline;
     final bodyLine = hasSummary ? article.aiSummary! : article.snippet;
-    // Link-out cards spend a row on the persistent "Swipe up to read at …"
-    // cue, so the text above it gets one line less each. Without this the
-    // headline is handed less height than its maxLines needs and hard-CLIPS
-    // mid-word instead of ellipsising — Text only ellipsises at maxLines, not
-    // at the height it was actually given.
-    final textLines = article.hasFullText ? 3 : 2;
+    // Line budget for the card's text block. Text only ellipsises at maxLines,
+    // never at the height it was actually given — so asking for more lines
+    // than fit produces a hard CLIP mid-word, not a graceful "…". The budget
+    // below is what actually fits:
+    //
+    //   summarised + full-text  hook is short (6–12 words), summary gets 3
+    //   summarised + link-out   one line each is given up to the swipe-up cue
+    //   NOT summarised          the real headline needs all 3 of its lines, so
+    //                           the standfirst gives way to 2
+    //
+    // That last case is why a Guardian card whose bite hasn't been generated
+    // yet used to clip: headline 3 + standfirst 3 is six lines, and six lines
+    // do not fit.
+    final headlineLines = article.hasFullText ? 3 : 2;
+    final bodyLines = article.hasFullText && article.hasSummary ? 3 : 2;
     return Container(
       decoration: BoxDecoration(
         color: bite.card,
@@ -92,7 +101,7 @@ class ArticleCard extends StatelessWidget {
                           type: MaterialType.transparency,
                           child: Text(
                             leadLine,
-                            maxLines: textLines,
+                            maxLines: headlineLines,
                             overflow: TextOverflow.ellipsis,
                             style:
                                 display(size: 26, weight: 560, height: 1.14),
@@ -105,7 +114,7 @@ class ArticleCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       bodyLine,
-                      maxLines: textLines,
+                      maxLines: bodyLines,
                       overflow: TextOverflow.ellipsis,
                       style: sans(size: 13.5, height: 1.5, color: bite.muted),
                     ),

@@ -79,6 +79,17 @@ class _TrackerDetailScreenState extends State<TrackerDetailScreen> {
                 ],
               ),
             ),
+            // A story that has stopped developing. Offered as a suggestion,
+            // never acted on automatically — a thread can go quiet for a week
+            // and then break again, so the decision stays with the reader.
+            if (tracker.isStale)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: _StalePrompt(
+                  tracker: tracker,
+                  onUnfollow: () => _confirmUnfollow(context),
+                ),
+              ),
             const SizedBox(height: 12),
             Expanded(
               child: FutureBuilder<List<Article>>(
@@ -105,12 +116,122 @@ class _TrackerDetailScreenState extends State<TrackerDetailScreen> {
     );
   }
 
+  /// Unfollowing is destructive (the timeline goes with it), so it stays
+  /// behind a confirm here exactly as it does in tracker management — a stale
+  /// prompt must not become a one-tap way to lose history.
+  Future<void> _confirmUnfollow(BuildContext context) async {
+    final state = AppScope.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Stop following?'),
+        content: Text(
+          '“${tracker.title}” and its timeline will be removed. '
+          'Saved stories and your reading history are unaffected.',
+          style: sans(size: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep following'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Unfollow'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    state.deleteTracker(tracker.id);
+    Navigator.of(context).pop();
+  }
+
   String _date(DateTime dt) {
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[dt.month - 1]} ${dt.day}';
+  }
+}
+
+/// Shown when a followed story has gone quiet for [FeedConfig.trackerStaleDays].
+///
+/// Deliberately low-key: a muted card, not an alert. The story may simply be
+/// between developments, so this offers an exit rather than declaring the
+/// story over. Muting is offered alongside unfollowing because it keeps the
+/// history while stopping the matching.
+class _StalePrompt extends StatelessWidget {
+  const _StalePrompt({required this.tracker, required this.onUnfollow});
+
+  final StoryTracker tracker;
+  final VoidCallback onUnfollow;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    final state = AppScope.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      decoration: BoxDecoration(
+        color: bite.ink.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: bite.border, width: 0.75),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.history_toggle_off, size: 16, color: bite.muted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Quiet for ${tracker.daysQuiet} days',
+                  style: sans(
+                      size: 13, weight: FontWeight.w600, color: bite.ink),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'No new coverage has matched this story in a while. It may have '
+            'run its course — or it may pick up again.',
+            style: sans(size: 12.5, height: 1.45, color: bite.muted),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () {
+                  state.setTrackerMuted(tracker.id, true);
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(const SnackBar(
+                      content: Text('Muted — history kept'),
+                      duration: Duration(milliseconds: 1400),
+                    ));
+                },
+                child: Text('Mute',
+                    style: sans(size: 13, color: bite.muted)),
+              ),
+              TextButton(
+                onPressed: onUnfollow,
+                child: Text('Unfollow',
+                    style: sans(
+                        size: 13,
+                        weight: FontWeight.w600,
+                        color: bite.accent)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

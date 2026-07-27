@@ -1,3 +1,5 @@
+import '../config/feed_config.dart';
+
 /// A followed story: a user-created tracker that collects new articles the
 /// server matches to it (Phase 13). Trackers live in their own Tracked
 /// section and never touch the main swipe feed's ranking.
@@ -44,6 +46,22 @@ class StoryTracker {
   /// Activity time used to sort the list (most recent development, or the
   /// creation time for a tracker with no new developments yet).
   DateTime get activityAt => latestAt ?? createdAt;
+
+  /// How long this story has been quiet.
+  Duration get sinceActivity => DateTime.now().difference(activityAt);
+
+  /// Whole days since the last development — what the stale prompt shows.
+  int get daysQuiet => sinceActivity.inDays;
+
+  /// Whether the story has gone quiet long enough to suggest unfollowing.
+  ///
+  /// Muted trackers are never stale: the user already told us to stop watching
+  /// this one, so nagging them about it would be noise. A tracker that has
+  /// never matched anything DOES go stale off its creation time — "you
+  /// followed this a week ago and nothing came of it" is exactly the case
+  /// worth surfacing.
+  bool get isStale =>
+      !muted && daysQuiet >= FeedConfig.trackerStaleDays;
 
   StoryTracker copyWith({
     String? title,
