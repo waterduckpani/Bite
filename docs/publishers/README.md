@@ -64,10 +64,11 @@ Notes worth carrying forward:
   drags the span-based estimate to ~0/day. What actually bounds a run is
   `MAX_ITEM_AGE_HOURS = 48` plus `max_per_run`, not the feed length.
 - Guardian is a **ninth publisher sharing the same
-  `MAX_ARTICLES_PER_RUN_TOTAL = 25`**, not an addition to it. Total daily
-  volume is unchanged and still tied to `DAILY_SUMMARY_CAP`; Guardian takes a
-  share of it. Its freshness also drops from the old 30-minute API cron to the
-  3-hourly RSS cycle.
+  `MAX_ARTICLES_PER_RUN_TOTAL = 25`**, not an addition to it; Guardian takes a
+  share of the run rather than adding to it. Its freshness also drops from the
+  old 30-minute API cron to the RSS cycle — 6-hourly since migration 0021,
+  which also halved total daily volume to ~100 articles (4 runs x 25), so
+  ingestion rather than `DAILY_SUMMARY_CAP` is now what bounds the pool.
 
 ## Selected — seeded into migration 0013
 
