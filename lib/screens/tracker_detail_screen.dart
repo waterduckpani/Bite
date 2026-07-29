@@ -6,7 +6,7 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable.dart';
 import '../widgets/reader_cue.dart';
-import 'reader_screen.dart';
+import 'browser_screen.dart';
 
 /// A tracker's developing story, newest development first. This is a timeline,
 /// NOT a personalised feed — no taste ranking, straight reverse-chronological
@@ -273,7 +273,7 @@ class _TimelineEntry extends StatelessWidget {
     final lead = hasSummary ? article.aiSummaryHook! : article.headline;
     final body = hasSummary ? article.aiSummary! : article.snippet;
     return Pressable(
-      onTap: () => ReaderScreen.open(context, article),
+      onTap: () => BrowserScreen.open(context, article),
       child: Container(
         decoration: BoxDecoration(
           color: bite.card,

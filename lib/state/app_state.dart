@@ -103,7 +103,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// Loads the article pool. Since Phase 8 the deck is served from Supabase:
-  /// a server-side cron ingests Guardian + NewsData and get_personalized_feed
+  /// a server-side cron ingests publisher RSS and get_personalized_feed
   /// returns the ranked, unseen slice — the client never calls a news API,
   /// and no news-API key ships in the bundle. When Supabase is unreachable
   /// (or its pool is still empty) the deck falls back to mock data.
@@ -122,18 +122,6 @@ class AppState extends ChangeNotifier {
     }
     deckEpoch++;
     notifyListeners();
-  }
-
-  /// Guardian body for the reader, proxied through the guardian-body Edge
-  /// Function (and its server-side cache). Empty means the story has no
-  /// readable body; throws when there's no backend or it's unreachable —
-  /// the reader shows its open-in-browser fallback for both.
-  Future<List<String>> fetchGuardianBody(String articleId) {
-    final repo = _repo;
-    if (repo == null || !repo.enabled) {
-      return Future.error(StateError('no backend'));
-    }
-    return repo.fetchGuardianBody(articleId);
   }
 
   static const _minRefreshGap = Duration(seconds: 60);
@@ -281,10 +269,12 @@ class AppState extends ChangeNotifier {
   /// most once per card.
   void openCard(Article a) {
     if (_openedIds.add(a.id)) _repo?.recordSwipe(a, 'opened');
-    // Phase 14: opening a link-out story IS the referral — the reader is being
-    // handed to the publisher's own page. Full-text stories open in Bite's
-    // native reader, so they are not a link-out and are not counted as one.
-    if (!a.hasFullText) recordLinkOut(a);
+    // Opening a story IS the referral — the reader is being handed to the
+    // publisher's own page, which since Phase 15.1 is the only thing opening a
+    // story can mean. recordReferral resolves the publisher server-side and
+    // ignores rows that have none (legacy Guardian-API, mock), so this needs
+    // no condition on the client.
+    recordLinkOut(a);
   }
 
   // -- Referral instrumentation (Phase 14, Part F) ---------------------------

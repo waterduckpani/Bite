@@ -12,13 +12,13 @@ enum Category {
   final String label;
 }
 
-/// Where an article came from. Determines licensing: only Guardian (and
-/// bundled mock) content may be rendered in the native reader; everything
-/// else opens at the source.
+/// Where an article came from.
 ///
-/// [rss] is a Phase 14 publisher-direct story. These are LINK-OUT ONLY — Bite
-/// is a referrer, not a replacement — so they always arrive with
-/// [Article.hasFullText] false and route to the in-app browser.
+/// Since Phase 15.1 this decides NOTHING about how a story opens: every
+/// article link-outs to the publisher, whatever produced it. [rss] is the only
+/// value new rows get — [guardian] and [newsdata] persist so that rows written
+/// by the retired Guardian Open Platform and NewsData ingesters still map back
+/// to a known provider instead of silently becoming [mock].
 enum ArticleProvider { guardian, newsdata, rss, mock }
 
 /// Cover art palette. Used as the card background while a cover image loads,
@@ -49,10 +49,9 @@ class Article {
     required this.url,
     required this.readMinutes,
     required this.palette,
-    required this.body,
     this.publishedAt,
     this.provider = ArticleProvider.mock,
-    this.hasFullText = true,
+    this.hasFullBody = false,
     this.sourceIconUrl = '',
     this.aiSummary,
     this.aiSummaryHook,
@@ -69,18 +68,22 @@ class Article {
   final int readMinutes;
   final CoverPalette palette;
 
-  /// Paragraphs of licensed full text. Empty when [hasFullText] is false.
-  final List<String> body;
-
   /// When the story was published. Null for mock data, which carries a
   /// hand-written [timeAgo] label instead.
   final DateTime? publishedAt;
 
   final ArticleProvider provider;
 
-  /// Whether [body] may be rendered in the native reader. False for
-  /// headline-only sources (NewsData.io), whose stories open at the source.
-  final bool hasFullText;
+  /// Mirrors `articles.full_text_available`: whether the SERVER had a full
+  /// article body to summarise from, rather than only the feed description.
+  ///
+  /// Phase 15.1 decoupled this from routing. It used to pick the native reader
+  /// vs. the in-app browser; there is no native reader now, every story
+  /// link-outs, and nothing in the UI branches on this. It is carried purely
+  /// so the column round-trips on upsert. Do NOT reintroduce it as a routing
+  /// or presentation flag — that is exactly the split that let a card's cue
+  /// disagree with where the tap went.
+  final bool hasFullBody;
 
   /// The outlet's favicon, when the provider supplies one. Chrome that needs
   /// an icon falls back to a favicon service, then a lettermark.

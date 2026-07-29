@@ -9,8 +9,71 @@ import 'cover_art.dart';
 import 'reader_cue.dart';
 import 'source_mark.dart';
 
-/// The big feed card: gradient cover with a category chip, serif headline,
-/// and a source row pinned to the bottom.
+// -- Card metrics -------------------------------------------------------------
+// The card does not scroll — it is swiped — so the whole bite has to fit the
+// space it is given. These constants are the layout budget: everything except
+// the summary is fixed-ish, and the summary gets a line allowance computed from
+// whatever is left over on the actual device (see [_ArticleCardBody]).
+//
+// They are tuned against the deck's REAL box, which is smaller than the screen
+// suggests: 360.5 × 520.5 on an iPhone 17, once the floating header, the tab
+// bar and the swiper's own insets are taken out. An 80-word bite is 12 lines
+// at this width, and 12 lines have to fit with a cover still above them —
+// that constraint is what sets the sizes below. article_card_layout_test.dart
+// pins it; retune there if any of these change.
+
+const double _kHookSize = 23;
+const double _kHookHeight = 1.14;
+
+/// The hook may run to three lines when there is room for it. Two is the
+/// common case; the third exists because a hook that clips mid-word under a
+/// half-empty cover is the single worst-looking state the card has.
+const int _kHookMaxLines = 3;
+
+const double _kBodySize = 13.5;
+const double _kBodyHeightFactor = 1.5;
+
+const double _kPadTop = 16;
+const double _kPadBottom = 14;
+const double _kGapHookBody = 8;
+const double _kGapBodyCue = 12;
+const double _kGapCueSource = 8;
+
+/// Rendered height of [LinkOutCue]: 9pt vertical padding either side, one
+/// 12.5pt line at 1.4, plus the 0.75 hairline top and bottom.
+const double _kCueHeight = 9 * 2 + 12.5 * 1.4 + 0.75 * 2;
+
+/// Rendered height of [SourceMark] — its lettermark avatar is the tallest
+/// thing in the row.
+const double _kSourceHeight = 20;
+
+/// Everything in the text block that is neither the summary nor the hook.
+/// The hook's height is measured rather than assumed, so a one-line hook hands
+/// its spare line to the bite instead of reserving it.
+const double _kFixedChrome = _kPadTop +
+    _kGapHookBody +
+    _kGapBodyCue +
+    _kCueHeight +
+    _kGapCueSource +
+    _kSourceHeight +
+    _kPadBottom;
+
+/// Smallest slice of the card the cover may shrink to when the bite runs long.
+/// A photo keeps a real band; a story with no image gets a slim on-brand strip
+/// instead, which is both the placeholder and the extra room the text needs.
+const double _kPhotoFloorFraction = 0.20;
+const double _kPhotoFloorMin = 92;
+const double _kPhotoFloorMax = 220;
+const double _kNoPhotoBand = 76;
+
+/// The big feed card. Since Phase 15.2 the AI bite IS the card: the hook is the
+/// headline and the full 50–80 word summary is the body, both visible before
+/// any interaction. Below them sits the persistent link-out to the publisher.
+///
+/// Nothing here scrolls, so the layout is inverted from the usual: the text
+/// block takes the height it needs and the cover absorbs whatever is left.
+/// A 40-word bite therefore yields a taller cover rather than a dead gap, and
+/// an 80-word bite squeezes the cover down to its floor rather than clipping.
 class ArticleCard extends StatelessWidget {
   const ArticleCard({super.key, required this.article});
 
@@ -19,27 +82,6 @@ class ArticleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bite = context.bite;
-    // When a Bite summary is present, the punchy hook leads (it morphs into
-    // the fuller real headline in the reader) and the summary is the body.
-    // Otherwise fall back to the publisher headline + standfirst, unchanged.
-    final hasSummary = article.hasSummary;
-    final leadLine = hasSummary ? article.aiSummaryHook! : article.headline;
-    final bodyLine = hasSummary ? article.aiSummary! : article.snippet;
-    // Line budget for the card's text block. Text only ellipsises at maxLines,
-    // never at the height it was actually given — so asking for more lines
-    // than fit produces a hard CLIP mid-word, not a graceful "…". The budget
-    // below is what actually fits:
-    //
-    //   summarised + full-text  hook is short (6–12 words), summary gets 3
-    //   summarised + link-out   one line each is given up to the swipe-up cue
-    //   NOT summarised          the real headline needs all 3 of its lines, so
-    //                           the standfirst gives way to 2
-    //
-    // That last case is why a Guardian card whose bite hasn't been generated
-    // yet used to clip: headline 3 + standfirst 3 is six lines, and six lines
-    // do not fit.
-    final headlineLines = article.hasFullText ? 3 : 2;
-    final bodyLines = article.hasFullText && article.hasSummary ? 3 : 2;
     return Container(
       decoration: BoxDecoration(
         color: bite.card,
@@ -54,92 +96,169 @@ class ArticleCard extends StatelessWidget {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 11,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Hero pair with the reader/browser: on swipe-up the cover
-                // and headline morph up into the opened screen.
-                HeroMode(
-                  enabled: !reducedMotion(context),
-                  child: Hero(
-                    tag: article.coverHeroTag,
-                    child: CoverArt(article: article, showCredit: true),
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Bounded in the swiper; the fallback only guards against being
+          // measured in an unbounded box (e.g. an intrinsic-height parent).
+          final cardHeight =
+              constraints.maxHeight.isFinite ? constraints.maxHeight : 520.0;
+          final coverFloor = article.hasImage
+              ? (cardHeight * _kPhotoFloorFraction)
+                  .clamp(_kPhotoFloorMin, _kPhotoFloorMax)
+              : _kNoPhotoBand;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Takes the leftover: whatever the bite doesn't need.
+              Expanded(child: _Cover(article: article)),
+              // Capped so the cover can never be squeezed below its floor,
+              // which is also what keeps the cue on-card at 80 words.
+              ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxHeight: cardHeight - coverFloor),
+                child: _ArticleCardBody(
+                  article: article,
+                  budget: cardHeight - coverFloor,
+                  width: constraints.maxWidth,
                 ),
-                Positioned(
-                  top: 14,
-                  left: 14,
-                  child: CategoryChip(label: article.category.label),
-                ),
-                // Followed-state marker (Phase 13): shows this story is already
-                // tracked, so it reads as followed and can't be double-followed.
-                if (AppScope.of(context).isFollowing(article.id))
-                  const Positioned(top: 14, right: 14, child: _FollowingBadge()),
-              ],
-            ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Cover slot: the photo when there is one, otherwise the category gradient as
+/// a deliberate band rather than a blank or a broken-image glyph. Same widget
+/// either way, so there is no layout jump between the two states.
+class _Cover extends StatelessWidget {
+  const _Cover({required this.article});
+
+  final Article article;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Hero pair with the browser: on swipe-up the cover and headline
+        // morph up into the opened screen.
+        HeroMode(
+          enabled: !reducedMotion(context),
+          child: Hero(
+            tag: article.coverHeroTag,
+            child: CoverArt(article: article, showCredit: true),
           ),
-          Expanded(
-            flex: 9,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Flexible (not fixed) so a long headline gives way instead
-                  // of overflowing the card on short screens.
-                  Flexible(
-                    child: HeroMode(
-                      enabled: !reducedMotion(context),
-                      child: Hero(
-                        tag: article.headlineHeroTag,
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: Text(
-                            leadLine,
-                            maxLines: headlineLines,
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                display(size: 26, weight: 560, height: 1.14),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: Text(
-                      bodyLine,
-                      maxLines: bodyLines,
-                      overflow: TextOverflow.ellipsis,
-                      style: sans(size: 13.5, height: 1.5, color: bite.muted),
-                    ),
-                  ),
-                  // Phase 14: link-out stories carry a persistent, prominent
-                  // route to the publisher directly under the bite. Full-text
-                  // stories keep the compact "Read in Bite" pill in the source
-                  // row below instead.
-                  if (!article.hasFullText) ...[
-                    LinkOutCue(article: article),
-                    const SizedBox(height: 10),
-                  ],
-                  Row(
-                    children: [
-                      Expanded(child: SourceMark(article: article)),
-                      if (article.hasFullText) ...[
-                        const SizedBox(width: 8),
-                        ReaderCue(article: article),
-                      ],
-                    ],
-                  ),
-                ],
+        ),
+        Positioned(
+          top: 14,
+          left: 14,
+          child: CategoryChip(label: article.category.label),
+        ),
+        // Followed-state marker (Phase 13): shows this story is already
+        // tracked, so it reads as followed and can't be double-followed.
+        if (AppScope.of(context).isFollowing(article.id))
+          const Positioned(top: 14, right: 14, child: _FollowingBadge()),
+      ],
+    );
+  }
+}
+
+/// Hook + bite + link-out + attribution.
+class _ArticleCardBody extends StatelessWidget {
+  const _ArticleCardBody({
+    required this.article,
+    required this.budget,
+    required this.width,
+  });
+
+  final Article article;
+
+  /// Vertical space this block may occupy, from which the summary's line
+  /// allowance is derived.
+  final double budget;
+
+  /// Card width, used to measure how many lines the hook actually takes.
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    // The feed only surfaces summarised articles (migration 0020), so the
+    // no-summary path is a belt-and-braces fallback for saved/tracker rows
+    // written before the gate. It shows the publisher headline and drops the
+    // body entirely — never a raw publisher description, and never an empty
+    // body block sitting there as a gap.
+    final hasSummary = article.hasSummary;
+    final lead = hasSummary ? article.aiSummaryHook! : article.headline;
+
+    final hookStyle =
+        display(size: _kHookSize, weight: 600, height: _kHookHeight);
+    final scaler = MediaQuery.textScalerOf(context);
+
+    // Measure the hook instead of reserving a worst case for it. One short
+    // string per build, which is cheap next to the paragraph layout Flutter
+    // does for the bite anyway — and it is what lets a one-line hook hand its
+    // spare line to the bite, and a long hook take a third line rather than
+    // clipping mid-word under a half-empty cover.
+    final hookHeight = (TextPainter(
+      text: TextSpan(text: lead, style: hookStyle),
+      textDirection: Directionality.of(context),
+      maxLines: _kHookMaxLines,
+      textScaler: scaler,
+    )..layout(maxWidth: width - 44))
+        .height;
+
+    // Text only ellipsises at maxLines, never at the height it was actually
+    // given — asking for more lines than fit produces a hard CLIP mid-word,
+    // not a graceful "…". So the allowance is computed, not guessed.
+    final bodyLine = scaler.scale(_kBodySize) * _kBodyHeightFactor;
+    final bodyLines =
+        ((budget - _kFixedChrome - hookHeight) / bodyLine).floor().clamp(3, 18);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, _kPadTop, 22, _kPadBottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          HeroMode(
+            enabled: !reducedMotion(context),
+            child: Hero(
+              tag: article.headlineHeroTag,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Text(
+                  lead,
+                  maxLines: _kHookMaxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: hookStyle,
+                ),
               ),
             ),
           ),
+          if (hasSummary) ...[
+            const SizedBox(height: _kGapHookBody),
+            Text(
+              article.aiSummary!,
+              maxLines: bodyLines,
+              overflow: TextOverflow.ellipsis,
+              style: sans(
+                size: _kBodySize,
+                height: _kBodyHeightFactor,
+                color: bite.muted,
+              ),
+            ),
+          ],
+          const SizedBox(height: _kGapBodyCue),
+          // Every story carries a persistent, prominent route to the
+          // publisher directly under the bite.
+          LinkOutCue(article: article),
+          const SizedBox(height: _kGapCueSource),
+          SourceMark(article: article),
         ],
       ),
     );

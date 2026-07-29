@@ -14,7 +14,7 @@ import '../widgets/category_chip.dart';
 import '../widgets/gesture_tutorial.dart';
 import '../widgets/glass.dart';
 import '../widgets/pressable.dart';
-import 'reader_screen.dart';
+import 'browser_screen.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -92,7 +92,7 @@ class _FeedScreenState extends State<FeedScreen> {
   /// additive "opened" signal, without resolving the card.
   void _openReader(AppState state, Article article) {
     state.openCard(article);
-    ReaderScreen.open(context, article);
+    BrowserScreen.open(context, article);
   }
 
   @override

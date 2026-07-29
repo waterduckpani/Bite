@@ -7,19 +7,25 @@
 // scales on its own cron.
 //
 // LICENSING GATE — read before touching the selection query below. We only
-// summarise text Bite is licensed to hold, and there are now exactly two kinds:
+// summarise text Bite is entitled to hold, and since Phase 15.1 there is
+// exactly ONE kind: PUBLISHER RSS rows (publisher_id is not null). Their text
+// is either the body ingest-rss was permitted to fetch (stored in rss_bodies,
+// service role only) or — often — just the feed's own description. These are
+// LINK-OUT ONLY, and summarising is not permission to render their body
+// anywhere.
 //
-//   1. GUARDIAN full body, fetched through the guardian-body proxy. Gated on
-//      full_text_available = true (the same flag that routes the native
-//      reader). Unchanged from Phase 10.
-//   2. PUBLISHER RSS rows (publisher_id is not null). Their text is either the
-//      body ingest-rss was permitted to fetch (stored in rss_bodies, service
-//      role only) or — far more often — just the feed's own description.
-//      These are LINK-OUT ONLY: full_text_available is false for every one of
-//      them and summarising is not permission to render their body anywhere.
+// The Guardian full-body path is GONE. It ran through the guardian-body proxy
+// on the licensed Open Platform API; that API and that function no longer
+// exist. Guardian is now an ordinary RSS publisher and goes through the RSS
+// path like everyone else.
 //
-// Snippet-only rows from any other source (NewsData) match neither and are
-// never selected — no code change needed to keep skipping them.
+// Rows with no publisher (legacy Guardian-API rows, mock) match nothing and
+// are never selected. They keep whatever bite they already have and age out.
+//
+// full_text_available is NOT consulted here any more. Phase 15.1 decoupled it:
+// it routes nothing (every article link-outs) and it selects nothing. Which
+// input a row gets — body or description — is decided below from what is
+// actually in rss_bodies.
 //
 // PHASE 14 CHANGES:
 //   - Hard 80-word cap enforced IN CODE after generation, not merely requested
@@ -34,15 +40,14 @@
 //   - DAILY_SUMMARY_CAP is a GLOBAL daily ceiling across all sources, enforced
 //     by claiming slots in the database before spending anything.
 //
-// Existing Guardian bites are NOT regenerated: the status gate only selects
-// rows that are null/pending, and they are already 40–60 words — comfortably
-// under the new cap.
+// Existing bites are NOT regenerated: the status gate only selects rows that
+// are null/pending.
 //
 // Deploy with --no-verify-jwt; access is gated by x-summarize-secret.
 //   supabase secrets set --env-file supabase/functions/.env.secrets
 //   supabase functions deploy summarize-articles --no-verify-jwt
-// Secrets: OPENROUTER_KEY, SUMMARIZE_SECRET, BODY_FN_SECRET (reused, to call
-// guardian-body). SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected.
+// Secrets: OPENROUTER_KEY, SUMMARIZE_SECRET. SUPABASE_URL /
+// SUPABASE_SERVICE_ROLE_KEY are injected.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -114,30 +119,6 @@ Rules:
 
 Output STRICT JSON and nothing else — no markdown, no code fences, no preamble:
 {"hook": "...", "summary": "..."}`;
-
-// -- Full-text fetch --------------------------------------------------------
-
-/// Guardian body via the guardian-body proxy: one licensing boundary, and it
-/// warms the reader's body cache as a side effect. Returns "" when there is no
-/// readable body (liveblog/gallery/takedown).
-async function fetchGuardianBody(
-  supabaseUrl: string,
-  bodySecret: string | undefined,
-  articleId: string,
-): Promise<string> {
-  const res = await fetch(`${supabaseUrl}/functions/v1/guardian-body`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(bodySecret ? { "x-body-secret": bodySecret } : {}),
-    },
-    body: JSON.stringify({ id: articleId }),
-  });
-  if (!res.ok) throw new Error(`guardian-body HTTP ${res.status}`);
-  const data = await res.json();
-  const paras: string[] = Array.isArray(data?.paragraphs) ? data.paragraphs : [];
-  return paras.join("\n\n").trim();
-}
 
 // -- Summariser (SOURCE-AGNOSTIC) -------------------------------------------
 // Pure over its inputs — it never knows or cares where the text came from, so
@@ -309,8 +290,7 @@ interface Candidate {
   id: string;
   title: string;
   snippet: string;
-  publisher_id: string | null;
-  full_text_available: boolean;
+  publisher_id: string;
   ai_summary_attempts: number;
 }
 
@@ -324,26 +304,22 @@ Deno.serve(async (req) => {
   if (!openrouterKey) {
     return Response.json({ error: "OPENROUTER_KEY not set" }, { status: 500 });
   }
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const bodySecret = Deno.env.get("BODY_FN_SECRET");
 
   // Service role: this function owns the ai_summary* columns.
   const supabase = createClient(
-    supabaseUrl,
+    Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Selection gate (see the licensing note at the top):
-  //   full_text_available = true   -> Guardian, body via the proxy
-  //   publisher_id is not null     -> Phase 14 RSS, body or description
-  // ...and only rows not yet done/failed, under the retry cap. Freshest first.
+  // Selection gate (see the licensing note at the top): Phase 14 RSS rows
+  // only, not yet done/failed, under the retry cap. Freshest first.
   //
   // Rows already marked 'done' are never reselected, which is what guarantees
-  // existing Guardian bites are not regenerated under the new prompt.
+  // existing bites are not regenerated under a changed prompt.
   const { data: rows, error } = await supabase
     .from("articles")
-    .select("id, title, snippet, publisher_id, full_text_available, ai_summary_attempts")
-    .or("full_text_available.eq.true,publisher_id.not.is.null")
+    .select("id, title, snippet, publisher_id, ai_summary_attempts")
+    .not("publisher_id", "is", null)
     .or("ai_summary_status.is.null,ai_summary_status.eq.pending")
     .lt("ai_summary_attempts", MAX_ATTEMPTS)
     .order("created_at", { ascending: false })
@@ -395,7 +371,7 @@ Deno.serve(async (req) => {
 
   // RSS body text, where ingest-rss was permitted to fetch it. Absent rows
   // simply fall back to description mode.
-  const rssIds = batch.filter((r) => r.publisher_id !== null).map((r) => r.id);
+  const rssIds = batch.map((r) => r.id);
   const rssBodies = new Map<string, string>();
   if (rssIds.length > 0) {
     const { data: bodyRows } = await supabase
@@ -443,25 +419,16 @@ Deno.serve(async (req) => {
       let text: string;
       let mode: InputMode;
 
-      if (row.publisher_id !== null) {
-        const body = rssBodies.get(row.id);
-        if (body && body.length >= 600) {
-          text = body;
-          mode = "body";
-        } else {
-          text = `${row.snippet ?? ""}`.trim();
-          mode = "description";
-          if (text.length < MIN_DESCRIPTION_CHARS) {
-            // Too thin to improve on — the card shows the snippet either way.
-            await markFailure(`description too thin (${text.length} chars)`, true);
-            return;
-          }
-        }
-      } else {
-        text = await fetchGuardianBody(supabaseUrl, bodySecret, row.id);
+      const body = rssBodies.get(row.id);
+      if (body && body.length >= 600) {
+        text = body;
         mode = "body";
-        if (!text) {
-          await markFailure("empty body", true);
+      } else {
+        text = `${row.snippet ?? ""}`.trim();
+        mode = "description";
+        if (text.length < MIN_DESCRIPTION_CHARS) {
+          // Too thin to improve on — the card shows the snippet either way.
+          await markFailure(`description too thin (${text.length} chars)`, true);
           return;
         }
       }
@@ -491,7 +458,7 @@ Deno.serve(async (req) => {
         return;
       }
       byMode[mode]++;
-      if (row.publisher_id !== null) summarisedRssIds.push(row.id);
+      summarisedRssIds.push(row.id);
       done++;
     } catch (e) {
       await markFailure(`${e}`, false);

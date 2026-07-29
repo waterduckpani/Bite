@@ -5,7 +5,7 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bite_tab_bar.dart';
 import '../widgets/saved_tile.dart';
-import 'reader_screen.dart';
+import 'browser_screen.dart';
 
 class SavedScreen extends StatefulWidget {
   const SavedScreen({super.key});
@@ -134,7 +134,7 @@ class _SavedScreenState extends State<SavedScreen> {
                         ),
                         child: SavedTile(
                           article: article,
-                          onTap: () => ReaderScreen.open(context, article),
+                          onTap: () => BrowserScreen.open(context, article),
                         ),
                       );
                     },

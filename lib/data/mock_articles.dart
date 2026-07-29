@@ -1,26 +1,14 @@
 import '../models/article.dart';
 import 'palettes.dart';
 
-// Shared filler paragraphs so every article reads like a real story
-// without bloating the mock data.
-const _fillA =
-    'Interviews with more than a dozen people close to the matter suggest the shift has been building for years, hiding in plain sight inside quarterly reports and conference-hall small talk. What changed is not the underlying facts but the willingness to say them out loud.';
-const _fillB =
-    'The second-order effects are harder to price. Analysts who once treated the sector as a rounding error now publish weekly notes on it, and the vocabulary has migrated from trade journals into boardrooms and group chats alike.';
-const _fillC =
-    'Skeptics remain, and their arguments are not frivolous. History is littered with confident projections that aged poorly, and the incentives to overstate momentum are obvious to anyone who has watched a hype cycle crest and collapse.';
-const _fillD =
-    'Still, the people doing the actual work describe something quieter than a revolution: a long accumulation of small decisions, each defensible on its own, that together add up to a different world than the one we planned for.';
-
 typedef _A = Article;
 
 final List<Article> mockArticles = [
   // -- Phase 14: link-out stories -------------------------------------------
-  // Publisher-direct cards, the shape ingest-rss produces. hasFullText is
-  // false, so these route to the in-app browser and the card shows the
-  // persistent "Swipe up to read at {publisher}" cue instead of the "Read in
-  // Bite" pill. They carry NO body: Bite is a referrer, not a replacement, and
-  // a publisher's article is never rendered natively.
+  // Publisher-direct cards, the shape ingest-rss produces. Since Phase 15.1
+  // EVERY card is one of these in behaviour: bodies are gone from the model,
+  // and every story shows the persistent "Swipe up to read at {publisher}" cue
+  // and opens the publisher's page. Bite is a referrer, not a replacement.
   //
   // Bundled so the keyless mock build still exercises the link-out card in
   // both themes — without one, the Phase 14 UI is unreachable without a
@@ -39,11 +27,9 @@ final List<Article> mockArticles = [
     readMinutes: 3,
     palette: rustPalette,
     provider: ArticleProvider.rss,
-    hasFullText: false,
     aiSummaryHook: 'Three states ration irrigation water after weak monsoon',
     aiSummary:
         'Three states have ordered irrigation rationing after the monsoon delivered well below its usual rainfall, leaving reservoirs at their lowest level in eleven years. Officials said the limits will hold until the winter crop is sown. Farming groups have asked for compensation.',
-    body: [],
   ),
   const _A(
     id: 'a01',
@@ -61,12 +47,6 @@ final List<Article> mockArticles = [
     aiSummaryHook: 'A quiet chip war is redrawing who controls AI',
     aiSummary:
         'Export rules, secretive fabs, and a scramble for advanced packaging capacity are shifting computing power toward a handful of little-known companies. The fight plays out in cleanrooms and customs offices rather than courtrooms, and its knock-on effects are only starting to be priced in.',
-    body: [
-      'The most consequential technology fight of the decade is not happening on app stores or in courtrooms. It is happening in cleanrooms, customs offices, and the procurement spreadsheets of a handful of companies most people have never heard of.',
-      _fillA,
-      _fillB,
-      _fillD,
-    ],
   ),
   const _A(
     id: 'a02',
@@ -81,12 +61,9 @@ final List<Article> mockArticles = [
     url: 'https://atlas.example/coastal-maps',
     readMinutes: 8,
     palette: navyPalette,
-    body: [
-      'The maps that governed these coastlines for a century are quietly being retired. In three of the largest delta cities, planners have begun issuing revised elevation charts every quarter rather than every decade — an admission that the ground beneath millions of people is no longer a fixed thing.',
-      'We stopped designing for the storm we remember and started designing for the one the models keep promising, one engineer said, standing on a berm that did not exist eighteen months ago.',
-      _fillC,
-      _fillD,
-    ],
+    aiSummaryHook: 'Delta cities are redrawing their maps every quarter',
+    aiSummary:
+        'Planners in three of the largest delta cities now reissue elevation charts every quarter instead of every decade, because the ground moves faster than the paperwork behind it. The revisions have already pushed thousands of properties into flood categories carrying higher insurance costs and stricter building rules. City engineers say the quarterly cycle is not a temporary measure but the new baseline, and neighbouring authorities are preparing to adopt the same schedule within the year.',
   ),
   const _A(
     id: 'a03',
@@ -101,12 +78,9 @@ final List<Article> mockArticles = [
     url: 'https://ledger.example/four-day-week',
     readMinutes: 5,
     palette: olivePalette,
-    body: [
-      'Nobody announced it. There was no legislation, no landmark court case. But scan the hiring pages of mid-size firms this quarter and a pattern emerges: the four-day week has stopped being a talking point and started being a line item.',
-      _fillA,
-      _fillB,
-      _fillC,
-    ],
+    aiSummaryHook: 'The four-day week is turning into the default',
+    aiSummary:
+        'A pandemic-era experiment is now showing up in job postings as a baseline expectation rather than a perk. Recruiters say listings without it draw noticeably fewer applications in several sectors, and a handful of firms have quietly dropped the trial framing altogether.',
   ),
   const _A(
     id: 'a04',
@@ -124,12 +98,6 @@ final List<Article> mockArticles = [
     aiSummaryHook: 'A planet that should not exist orbits a dead star',
     aiSummary:
         'Astronomers have found a gas giant circling a stellar remnant, where models said no planet could survive its star\'s collapse. Its presence challenges assumptions about what becomes of planetary systems after a star dies, hinting that some worlds endure in places long ruled out.',
-    body: [
-      'By every model on the books, the planet should be a wisp of vapor. Instead it hangs there, intact and improbable, circling the collapsed remnant of the star that should have devoured it.',
-      _fillA,
-      _fillC,
-      _fillD,
-    ],
   ),
   const _A(
     id: 'a05',
@@ -144,12 +112,9 @@ final List<Article> mockArticles = [
     url: 'https://baseline.example/underdog-final',
     readMinutes: 4,
     palette: rustPalette,
-    body: [
-      'The stadium had seen champions crowned before, but never like this: a club whose entire payroll costs less than the opposition\'s bench, holding its shape deep into extra time while the noise made the cameras shake.',
-      _fillA,
-      _fillD,
-      _fillB,
-    ],
+    aiSummaryHook: 'The smallest club in the league made the giants blink',
+    aiSummary:
+        'A fifty-year drought ended in extra time, with the league\'s smallest club beating a side whose wage bill is nine times its own. The winning goal came from a player signed on a free transfer in January. The club has already said it will not sell him this summer.',
   ),
   const _A(
     id: 'a06',
@@ -164,12 +129,9 @@ final List<Article> mockArticles = [
     url: 'https://marquee.example/streaming-cable',
     readMinutes: 6,
     palette: plumPalette,
-    body: [
-      'Ten years ago the pitch was simple: pay for what you want, watch it anywhere, cancel anytime. This week, the average household needs four subscriptions, an ad tier, and a shared calendar to follow one prestige drama.',
-      _fillB,
-      _fillC,
-      _fillD,
-    ],
+    aiSummaryHook: 'Streaming has quietly rebuilt the thing it replaced',
+    aiSummary:
+        'Bundles, ad tiers and household password rules have reassembled most of what cable offered, at a comparable monthly cost. Subscribers are responding by cycling in and out of services around single releases, a pattern the industry now spends heavily to discourage.',
   ),
   const _A(
     id: 'a07',
@@ -184,12 +146,9 @@ final List<Article> mockArticles = [
     url: 'https://thesignal.example/open-source-model',
     readMinutes: 5,
     palette: navyPalette,
-    body: [
-      'The release notes were two paragraphs long and contained one typo. The weights landed on a public server on a Friday night, and by Monday morning the leaderboard maintainers were rechecking their own math.',
-      _fillA,
-      _fillB,
-      _fillC,
-    ],
+    aiSummaryHook: 'A weekend project is outrunning a billion-dollar lab',
+    aiSummary:
+        'A loose collective of researchers released a model built over a weekend that now matches far better-funded systems on several public benchmarks. The weights are open, so the result was reproduced within days. Labs that spent years on the same problem have not publicly responded.',
   ),
   const _A(
     id: 'a08',
@@ -204,12 +163,9 @@ final List<Article> mockArticles = [
     url: 'https://atlas.example/pencil-ceasefire',
     readMinutes: 9,
     palette: rustPalette,
-    body: [
-      'The agreement that stopped the shelling runs to eleven pages, and the parts that matter most are the ones written to mean two different things at once.',
-      _fillA,
-      _fillC,
-      _fillD,
-    ],
+    aiSummaryHook: 'A ceasefire built on side letters and personal trust',
+    aiSummary:
+        'Negotiators describe an agreement resting on unpublished side letters and language vague enough for both sides to claim a win. Nobody involved expected the talks to survive the first week, and several delegates arrived with instructions to walk out. What kept them in the room was a narrow set of guarantees no signatory has been willing to describe publicly, and which may not outlast the officials who wrote them.',
   ),
   const _A(
     id: 'a09',
@@ -224,12 +180,9 @@ final List<Article> mockArticles = [
     url: 'https://ledger.example/commodity-chips',
     readMinutes: 6,
     palette: tealPalette,
-    body: [
-      'It is the least glamorous chip in the building: no branding, no keynote, a part number instead of a name. It is also, this quarter, the reason three assembly lines on two continents are standing still.',
-      _fillB,
-      _fillA,
-      _fillD,
-    ],
+    aiSummaryHook: 'The dullest chip in your kitchen is now leverage',
+    aiSummary:
+        'Commodity microcontrollers were an afterthought for forty years, until every industry that embeds one tried to buy them at the same time. Lead times that ran weeks now run quarters, and appliance makers are redesigning products around whichever part they can actually source.',
   ),
   const _A(
     id: 'a10',
@@ -244,12 +197,9 @@ final List<Article> mockArticles = [
     url: 'https://orbit.example/gene-cure',
     readMinutes: 8,
     palette: olivePalette,
-    body: [
-      'The word "cure" appears exactly once in the trial paper, hedged by three qualifiers. The patients use it more freely.',
-      _fillA,
-      _fillC,
-      _fillB,
-    ],
+    aiSummaryHook: 'A one-shot cure arrives with a pricing crisis',
+    aiSummary:
+        'A single infusion ended a lifelong genetic disease in forty-one trial patients, the first outright cure of its kind to clear regulatory review. The clinical result is not in dispute; the bill is. Health systems built to spread costs across decades of treatment now face one payment large enough to distort an annual budget, and insurers, hospitals and the regulator that approved it are already arguing over who absorbs it first.',
   ),
   const _A(
     id: 'a11',
@@ -264,12 +214,9 @@ final List<Article> mockArticles = [
     url: 'https://baseline.example/record-transfer',
     readMinutes: 5,
     palette: navyPalette,
-    body: [
-      'When the fee leaked, the first reaction across the league was laughter. The second was a flurry of emergency board meetings.',
-      _fillB,
-      _fillD,
-      _fillC,
-    ],
+    aiSummaryHook: 'One record deal forced every club to reprice its roster',
+    aiSummary:
+        'A transfer that broke the league\'s salary model sent every rival back to renegotiate what a squad is worth. The immediate effect was panic; the measured one is that attendance is up across the division, including at clubs that lost players in the reshuffle.',
   ),
   const _A(
     id: 'a12',
@@ -284,12 +231,9 @@ final List<Article> mockArticles = [
     url: 'https://marquee.example/generated-score',
     readMinutes: 7,
     palette: tealPalette,
-    body: [
-      'The composer credit reads like a legal settlement, because it is one. Four names, two asterisks, and a footnote that will be argued about for years.',
-      _fillC,
-      _fillA,
-      _fillD,
-    ],
+    aiSummaryHook: 'A generated score picked up a real nomination',
+    aiSummary:
+        'An indie film scored entirely by a model trained on public-domain recordings has been nominated, forcing the academy to decide what authorship means when no performer was in the room. The credited composer is the person who wrote the prompts and edited the output. Rival nominees have asked for a separate category; the academy has so far declined, saying the rules were written around the work rather than the tools that made it.',
   ),
   const _A(
     id: 'a13',
@@ -304,12 +248,9 @@ final List<Article> mockArticles = [
     url: 'https://thesignal.example/passkeys',
     readMinutes: 4,
     palette: rustPalette,
-    body: [
-      'The obituary has been written a dozen times, but this one might stick: as of this month, every one of the hundred most-visited sites on the internet accepts a passkey.',
-      _fillB,
-      _fillA,
-      _fillC,
-    ],
+    aiSummaryHook: 'Passwords are dead on the sites you use most',
+    aiSummary:
+        'Passkeys are now the default on the hundred largest consumer sites, and password resets on them have fallen sharply. The long tail is untouched: millions of smaller logins still hinge on a string invented years ago and reused everywhere else.',
   ),
   const _A(
     id: 'a14',
@@ -324,12 +265,9 @@ final List<Article> mockArticles = [
     url: 'https://atlas.example/three-border-rail',
     readMinutes: 7,
     palette: olivePalette,
-    body: [
-      'The surveyors\' notebooks from 1921 are still legible, and for long stretches the new line follows their pencil marks exactly. The politics took a hundred years to catch up to the geography.',
-      _fillA,
-      _fillD,
-      _fillB,
-    ],
+    aiSummaryHook: 'Freight demand finished a rail line diplomacy could not',
+    aiSummary:
+        'A route surveyed a century ago and abandoned twice is being built across three borders, on old maps and an agreement that was never formally ratified. Officials credit freight volumes rather than diplomacy: the shipping that already crosses the corridor made the case that decades of talks could not.',
   ),
   const _A(
     id: 'a15',
@@ -344,12 +282,9 @@ final List<Article> mockArticles = [
     url: 'https://orbit.example/reef-return',
     readMinutes: 6,
     palette: plumPalette,
-    body: [
-      'Nobody planned the experiment. A rerouted shipping lane simply left four hundred square kilometers of water quiet for three years, and the ocean did the rest.',
-      _fillC,
-      _fillB,
-      _fillD,
-    ],
+    aiSummaryHook: 'A closed shipping lane gave biologists a control group',
+    aiSummary:
+        'When a shipping lane shut for two years, the reef beneath it recovered enough to surprise the researchers monitoring it. The closure handed marine biologists something field science almost never gets: an untouched comparison the size of a small sea, against which every other reef can now be read.',
   ),
   const _A(
     id: 'a17',
@@ -365,10 +300,8 @@ final List<Article> mockArticles = [
     readMinutes: 2,
     palette: tealPalette,
     provider: ArticleProvider.rss,
-    hasFullText: false,
     aiSummaryHook: 'Inquiry opened into simultaneous undersea cable faults',
     aiSummary:
         'Regulators have opened an inquiry after four operators reported faults on the same undersea route within a day, disrupting international traffic for several hours. The operators said repairs are under way. The regulator did not say whether it suspects deliberate damage.',
-    body: [],
   ),
 ];

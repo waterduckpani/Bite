@@ -5,8 +5,8 @@
 Bite turns the news into a deck of cards. Swipe through stories the way you'd
 swipe through anything else on your phone — and behind each gesture is a
 recommendation engine that quietly builds a model of your taste, an AI that
-rewrites every story into a two-line "bite," and a story-tracking system that
-follows a developing news thread for you over time.
+rewrites every story into a "bite" you read on the card itself, and a
+story-tracking system that follows a developing news thread for you over time.
 
 Built with **Flutter** (iOS-first) on a fully **server-driven Supabase
 backend**: Postgres + pgvector for recommendations, Deno edge functions for
@@ -26,12 +26,13 @@ Most news apps give you an infinite scroll and a firehose of headlines. Bite
 makes reading the news a series of small, deliberate decisions:
 
 - **One story at a time**, presented as a full-bleed card with cover art, a
-  source mark, and an AI-written hook.
+  source mark, and the AI bite itself.
 - **Four gestures, four meanings** — every swipe is a signal, and the feed
   reorders itself around what you engage with.
-- **A "bite" instead of a headline** — an LLM condenses each full article into
-  a punchy hook and a short summary, so you get the gist before you decide to
-  read.
+- **A "bite" instead of a headline** — an LLM condenses each story into a punchy
+  hook and a 50–80 word summary, and **that is the card**: the hook is the
+  headline and the whole summary is the body, both readable before you touch
+  anything. You get the gist, then decide whether to open the publisher.
 - **Story trackers** — follow a developing story and Bite collects new
   coverage of that same thread into a dedicated timeline as it breaks.
 
@@ -75,14 +76,12 @@ keep a Postgres table of articles fresh, and the app reads a single
 personalized RPC:
 
 ```
-                Guardian API            publisher RSS feeds
-                     │                          │
-   (*/30 cron)  ┌────▼─────────┐   (:20 /3h) ┌──▼─────────┐
-                │  ingest-news │             │ ingest-rss │
-                └──────┬───────┘             └──────┬─────┘
-                       │      articles + tags       │
-                       └───────────┬────────────────┘
+                          publisher RSS feeds
                                    │
+                     (:20 /3h) ┌───▼────────┐
+                               │ ingest-rss │
+                               └───┬────────┘
+                                   │  articles
                                    ▼
    (:05,:35)    ┌──────────────┐        ┌───────────┐
                 │    embed     │◀───────│  Postgres │
@@ -101,43 +100,49 @@ personalized RPC:
                              get_personalized_feed()  ──►  Flutter app
 ```
 
-1. **`ingest-news`** pulls fresh stories from The Guardian (sections + keyword
-   tags), deduplicates them, and upserts them with the service role.
-2. **`ingest-rss`** reads the enabled publishers' RSS feeds under a published
-   bot policy — robots.txt honoured, one honest User-Agent, a round-robin fair
-   share so no single outlet crowds the run — and normalises them into the same
-   table, link-out only.
-3. **`embed`** turns each new article into a vector embedding (`gte-small`) via
+1. **`ingest-rss`** reads every enabled publisher's RSS feeds (a publisher may
+   run several section feeds; they are merged before any cap applies) under a
+   published bot policy — robots.txt honoured, one honest User-Agent, a
+   round-robin fair share so no single outlet crowds the run — deduplicates,
+   and upserts with the service role. Since Phase 15.1 this is the *only*
+   ingestion path: there is no licensed news API anywhere in the system.
+2. **`embed`** turns each new article into a vector embedding (`gte-small`) via
    pg_net-triggered, self-chaining batches — this is what powers similarity.
-4. **`summarize-articles`** calls an LLM (via OpenRouter, with a fallback model
-   chain) to produce the Bite-voice hook and summary — from the full body where
-   Bite holds one, otherwise from the publisher's own description. Output is
-   capped at 80 words in code and metered against a global daily ceiling. A
-   failed summary falls back gracefully to the standfirst.
-5. **`match-trackers`** scores fresh articles against each story tracker using a
-   hybrid of tag-Jaccard and embedding cosine similarity — falling back to an
-   embedding-only path with its own threshold when either side has no tags, so
-   publisher-direct stories can match too.
-6. **`get_personalized_feed`** is a single Postgres RPC that assembles the deck:
+3. **`summarize-articles`** calls an LLM (via OpenRouter, with a fallback model
+   chain) to produce the Bite-voice hook and summary — from the article body
+   where robots.txt permitted fetching one, otherwise from the publisher's own
+   description. Output is
+   capped at 80 words in code and metered against a global daily ceiling.
+   Because the bite *is* the card, an article with no bite yet simply waits in
+   the pool for the next run rather than surfacing without one.
+4. **`match-trackers`** scores fresh articles against each story tracker on
+   embedding cosine similarity, with a high threshold and a per-tracker
+   per-run cap so a miscalibrated bar costs a few wrong articles rather than a
+   flooded timeline.
+5. **`get_personalized_feed`** is a single Postgres RPC that assembles the deck:
    taste similarity + category affinity + recency, minus the topic penalty,
    plus a mild country nudge, with the exploration slice interleaved via
-   collision-free slot math.
+   collision-free slot math. It also **gates on the bite** — only summarised
+   articles are candidates, so a card without one cannot render. If that ever
+   visibly thins the deck, it is a summarisation-throughput signal, not a
+   reason to show bite-less cards.
 
 All of this runs behind Row-Level Security — every user sees only their own
 saves, swipes, preferences, and trackers.
 
 ### Publisher-direct sources: a referrer, not a replacement
 
-Alongside Guardian, Bite reads a small, version-controlled registry of
-publisher RSS feeds (`ingest-rss`, every three hours). The governing rule is
-that **Bite is a referrer, not a replacement**, and the design makes that
-structural rather than aspirational:
+Bite reads a small, version-controlled registry of publisher RSS feeds
+(`ingest-rss`, every three hours) — since Phase 15.1 that includes The
+Guardian, which qualified through the same script as everyone else after its
+licensed API was dropped. The governing rule is that **Bite is a referrer, not
+a replacement**, and the design makes that structural rather than aspirational:
 
 - **Attribution can't be dropped.** Publisher name and canonical URL are
   required columns; a card cannot render without them.
-- **Every publisher-direct story is link-out only.** `full_text_available` is
-  written `false` unconditionally, so the reader router always sends these to
-  the publisher's own page — their layout, their branding, their advertising.
+- **Every story is link-out only.** There is no native reader and no routing
+  flag to get wrong: every card opens the publisher's own page — their layout,
+  their branding, their advertising.
 - **The bite informs, it doesn't complete.** Summaries are capped at **80 words
   in code**, not merely in the prompt.
 - **Nothing is circumvented.** One fixed, honest User-Agent
@@ -156,25 +161,22 @@ still skewed.
 
 ### Reading a story
 
-Tapping (or swiping up) opens the reader. Bite keeps a hard licensing boundary:
+Tapping (or swiping up) opens the publisher's own page in an in-app browser.
+That is the only thing it can do: Phase 15.1 removed the native reader
+entirely, so there is one tier, one destination, and no flag that can make a
+card's promise disagree with where the tap goes. Every card carries a
+persistent *"Swipe up to read at {publisher}"* cue and a *"Read at
+{publisher}"* pill.
 
-- **Full-text sources** (Guardian) render natively in-app, with a sage-tinted
-  **"The Bite"** summary block above the original article body.
-- **Everything else** — headline-only sources and every publisher-direct story
-  — opens the publisher's own page in an in-app browser. Bite never re-hosts
-  content it isn't licensed to show, and those cards carry a persistent
-  *"Swipe up to read at {publisher}"* cue so the destination is never a
-  surprise.
-
-Article bodies are proxied and cached server-side (`guardian-body`) so the app
-bundle never carries a news-API key.
+Bite never re-hosts content, and the app bundle carries no news-API key and no
+Edge Function secret of any kind.
 
 ### Story trackers
 
-Follow a developing story from the reader (a bell toggle) and Bite creates a
-tracker seeded from that article's embedding and tags. As new coverage of the
-same thread is ingested, `match-trackers` collects it into a reverse-chronological
-timeline with an in-app unread badge. Trackers live *alongside* the swipe feed
+Follow a developing story from the in-app browser (a bell toggle) and Bite
+creates a tracker seeded from that article's embedding. As new coverage of the
+same thread is ingested, `match-trackers` collects it into a
+reverse-chronological timeline with an in-app unread badge. Trackers live *alongside* the swipe feed
 and never influence its ranking — they're a separate lens on the news, not a
 change to your taste model.
 
@@ -188,21 +190,21 @@ Flutter (iOS-first)
 ├─ Persistence     UserDataRepository — offline op-queue, optimistic writes,
 │                  hydrate-on-startup, anonymous → email/Apple auth upgrade
 ├─ Feed            personalized RPC → mock fallback (always launchable keyless)
-└─ Reader          native in-app reader ↔ in-app browser by licensing
+└─ Reader          in-app browser only — every story opens at the publisher
 
 Supabase
 ├─ Postgres        articles, profiles, saves, swipe_events, category_prefs,
 │                  story_trackers, tracker_articles, publishers,
 │                  referral_events  (+ pgvector, RLS everywhere)
-├─ Edge Functions  ingest-news · ingest-rss · embed · summarize-articles ·
-│                  match-trackers · guardian-body
+├─ Edge Functions  ingest-rss · embed · summarize-articles · match-trackers
+│                  (ingest-news is retired NewsData scaffolding, cron off)
 └─ Scheduling      pg_cron pipelines: ingest → embed/summarize → match → purge
 ```
 
 **Design principles that shaped the codebase:**
 
-- **Server-driven, keyless client** — no news-API key ever ships in the app
-  bundle; the client reads one personalized RPC and a body proxy.
+- **Server-driven, keyless client** — the app bundle holds no news-API key and
+  no Edge Function secret; the client reads one personalized RPC.
 - **Always launchable** — with no credentials the app runs entirely on bundled
   mock data and in-memory state.
 - **Offline-first writes** — saves/swipes queue locally and reconcile on
@@ -224,8 +226,8 @@ Supabase
 **AI** · sentence embeddings (`gte-small`) for taste & tracker matching · LLM
 summarization via OpenRouter (Gemini Flash family, with a fallback chain)
 
-**Content** · The Guardian Open Platform (licensed full text) · publisher RSS
-feeds, link-out only, under a published bot policy
+**Content** · publisher RSS feeds only — including The Guardian — link-out
+only, under a published bot policy. No licensed content API.
 
 ---
 
@@ -236,7 +238,7 @@ lib/
 ├─ config/        AppConfig + feed tuning constants
 ├─ data/          bundled mock articles, palettes, source metadata
 ├─ models/        Article, StoryTracker, Country
-├─ screens/       feed · reader · browser · saved · tracked · discover ·
+├─ screens/       feed · browser · saved · tracked · discover ·
 │                 onboarding · profile · tracker detail/management
 ├─ services/      UserDataRepository (persistence + auth)
 ├─ state/         AppState (app-wide state)
@@ -244,8 +246,8 @@ lib/
 └─ widgets/       article card, tab bar, gesture tutorial, glass, cover art …
 
 supabase/
-├─ functions/     ingest-news · ingest-rss · embed · summarize-articles ·
-│                 match-trackers · guardian-body
+├─ functions/     ingest-rss · embed · summarize-articles · match-trackers ·
+│                 ingest-news (retired: NewsData-only, disabled, cron off)
 │                 _shared/  bot identity + robots.txt · RSS parsing ·
 │                           junk filter · the 80-word cap
 └─ migrations/    (kept local — see note below)
@@ -329,8 +331,9 @@ select * from public.ai_usage_daily order by day desc limit 14;
 Bite is a personal project built in phases — design system and motion, live
 content, Supabase persistence, authentication, a pgvector recommendation
 engine, server-side ingestion, AI summaries, the four-gesture swipe rework,
-story trackers, and publisher-direct ingestion with click-through reporting. It is a functional, end-to-end iOS app, not a shipped App Store
-product.
+story trackers, publisher-direct ingestion with click-through reporting, and
+the bite moving onto the card face. It is a functional, end-to-end iOS app, not
+a shipped App Store product.
 
 ---
 
