@@ -22,7 +22,7 @@
 // opinion filter → dedupe → fair-share cap → THEN the body fetch. Tokens and
 // outbound requests are only ever spent on rows that will actually be shown.
 //
-// Invoked with an empty POST by the pg_cron job (bite-ingest-rss, every 3
+// Invoked with an empty POST by the pg_cron job (bite-ingest-rss, every 6
 // hours); gated by the INGEST_RSS_SECRET header. Deploy with --no-verify-jwt.
 //   supabase secrets set INGEST_RSS_SECRET=c7d21e5a84f9b0362d1c8e47a5b93f60e284c71d9a3b5f08
 //   supabase functions deploy ingest-rss --no-verify-jwt
@@ -61,10 +61,13 @@ type Db = ReturnType<typeof createDb>;
 
 // -- Config (one place) -----------------------------------------------------
 
-/// Global ceiling per run, across ALL enabled publishers. 25 x 8 runs/day =
-/// 200/day = DAILY_SUMMARY_CAP, so ingestion can never outrun the summariser's
-/// budget. Raising this without raising DAILY_SUMMARY_CAP just means more rows
-/// with no bite.
+/// Global ceiling per run, across ALL enabled publishers. 25 x 4 runs/day =
+/// 100/day, against a DAILY_SUMMARY_CAP of 200 — so since the cron went
+/// 6-hourly (migration 0021) INGESTION is the binding constraint, not the
+/// summariser's budget, and the cap is a safety ceiling that is not reached.
+/// This is the lever for deck supply: raising DAILY_SUMMARY_CAP alone buys
+/// nothing. Above roughly 30, per-publisher max_per_run (default 3, Guardian
+/// 6) binds first and has to move with it.
 const MAX_ARTICLES_PER_RUN_TOTAL = 25;
 
 /// How far back a story may be published and still be ingested. The feed pool

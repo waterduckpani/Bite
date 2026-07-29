@@ -78,7 +78,7 @@ personalized RPC:
 ```
                           publisher RSS feeds
                                    │
-                     (:20 /3h) ┌───▼────────┐
+                     (:20 /6h) ┌───▼────────┐
                                │ ingest-rss │
                                └───┬────────┘
                                    │  articles
@@ -133,7 +133,7 @@ saves, swipes, preferences, and trackers.
 ### Publisher-direct sources: a referrer, not a replacement
 
 Bite reads a small, version-controlled registry of publisher RSS feeds
-(`ingest-rss`, every three hours) — since Phase 15.1 that includes The
+(`ingest-rss`, every six hours) — since Phase 15.1 that includes The
 Guardian, which qualified through the same script as everyone else after its
 licensed API was dropped. The governing rule is that **Bite is a referrer, not
 a replacement**, and the design makes that structural rather than aspirational:
