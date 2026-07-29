@@ -10,7 +10,7 @@ import '../widgets/bite_tab_bar.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/pressable.dart';
 import '../widgets/saved_tile.dart';
-import 'reader_screen.dart';
+import 'browser_screen.dart';
 
 /// Topic browser: a snapping "trending" carousel on top of a grid of
 /// category tiles that morph open into their topic's list.
@@ -163,7 +163,7 @@ class _TrendingCarousel extends StatelessWidget {
           return Padding(
             padding: EdgeInsets.only(left: i == 0 ? 24 : 6, right: 6),
             child: Pressable(
-              onTap: () => ReaderScreen.open(context, article),
+              onTap: () => BrowserScreen.open(context, article),
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
@@ -336,7 +336,7 @@ class _CategoryList extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) => SavedTile(
           article: articles[i],
-          onTap: () => ReaderScreen.open(context, articles[i]),
+          onTap: () => BrowserScreen.open(context, articles[i]),
         ),
       ),
     );

@@ -181,7 +181,7 @@ class ProfileScreen extends StatelessWidget {
             child: Text(
               'Bite 0.1.0 — ${switch (state.status) {
                 ContentStatus.live =>
-                  'live stories from The Guardian & NewsData.io',
+                  'live stories from publisher feeds',
                 ContentStatus.loading => 'fetching live stories…',
                 ContentStatus.mock => 'sample stories (no API keys)',
               }}\n${state.hasAccounts ? (state.isSignedIn ? 'Signed in as ${state.accountEmail}' : 'Guest saves live on this device until you sign in') : 'Saves and history reset on restart'}',

@@ -313,7 +313,7 @@ class UserDataRepository {
 
   // -- Story trackers (Phase 13) ---------------------------------------------
   // A tracker's centroid + tags are seeded server-side from the article's
-  // existing embedding/Guardian tags (create_tracker), so creation is an RPC,
+  // existing embedding (create_tracker), so creation is an RPC,
   // not a plain insert. Everything else is a normal RLS-scoped table write or
   // read RPC. Matching (tracker_articles inserts) happens server-side.
 
@@ -357,7 +357,7 @@ class UserDataRepository {
   }
 
   /// Creates a tracker seeded from [article], reusing its server-side
-  /// embedding + Guardian tags. The id is client-generated so the UI is
+  /// embedding. The id is client-generated so the UI is
   /// optimistic; the RPC is idempotent on (user, seed story).
   void createTracker(String trackerId, Article article, String title) {
     _enqueue(() async {
@@ -403,28 +403,6 @@ class UserDataRepository {
         _client.rpc('mark_tracker_seen', params: {'p_tracker_id': trackerId}));
   }
 
-  // -- Reader body proxy -------------------------------------------------------
-
-  /// Body paragraphs for a Guardian story, served by the guardian-body Edge
-  /// Function — the client holds no news-API key. The function caches bodies
-  /// server-side (24h), so repeat opens of the same story don't re-hit the
-  /// Guardian. Returns an empty list for stories with no readable body;
-  /// throws when disabled or unreachable — the reader degrades to its in-app
-  /// browser fallback either way.
-  Future<List<String>> fetchGuardianBody(String articleId) async {
-    if (!_enabled) throw StateError('persistence disabled');
-    final secret = AppConfig.bodyFnSecret;
-    final res = await _client.functions.invoke(
-      'guardian-body',
-      body: {'id': articleId},
-      headers: {if (secret != null) 'x-body-secret': secret},
-    ).timeout(const Duration(seconds: 12));
-    final data = res.data as Map<String, dynamic>;
-    return [
-      for (final p in (data['paragraphs'] as List?) ?? const []) p as String,
-    ];
-  }
-
   // -- Writes (optimistic, queued in order) ----------------------------------
 
   void setOnboarded() {
@@ -435,7 +413,8 @@ class UserDataRepository {
   }
 
   /// Persists the user's selected country (Part E). Stored as the enum name;
-  /// the feed RPC maps it to a Guardian tag for the mild country nudge.
+  /// the feed RPC matches it against publisher section labels and article URL
+  /// paths for the mild country nudge.
   void setCountry(Country country) {
     _enqueue(() => _client.from('profiles').upsert({
           'id': _uid,
@@ -502,8 +481,8 @@ class UserDataRepository {
   /// shown, `linkout` when the reader taps or swipes through to the publisher.
   ///
   /// The publisher is resolved SERVER-SIDE from the article row, so the client
-  /// never sends (and cannot forge) attribution. Guardian, mock and unknown
-  /// articles are ignored by the RPC — there is no publisher to credit.
+  /// never sends (and cannot forge) attribution. Legacy Guardian-API, mock and
+  /// unknown articles are ignored by the RPC — there is no publisher to credit.
   ///
   /// This is what makes "Bite is a referrer, not a replacement" a measurable
   /// claim rather than a stated one: it is the input to the per-publisher CTR
@@ -558,8 +537,8 @@ class UserDataRepository {
   }
 
   // -- Article metadata mapping ----------------------------------------------
-  // LEGAL: metadata only — bodies are never persisted. The reader re-fetches
-  // Guardian text on demand.
+  // LEGAL: metadata only — article bodies are never persisted client-side and
+  // never rendered in the app. Every story opens at the publisher.
 
   Future<void> _upsertArticle(Article a) {
     return _client.from('articles').upsert(_articleRow(a));
@@ -578,7 +557,7 @@ class UserDataRepository {
         'author': a.author,
         'read_minutes': a.readMinutes,
         'source_icon_url': a.sourceIconUrl,
-        'full_text_available': a.hasFullText,
+        'full_text_available': a.hasFullBody,
         'published_at': a.publishedAt?.toUtc().toIso8601String(),
       };
 
@@ -609,11 +588,10 @@ class UserDataRepository {
       url: row['original_url'] as String? ?? '',
       readMinutes: (row['read_minutes'] as num?)?.toInt() ?? 3,
       palette: paletteFor(category),
-      body: const [], // re-fetched on demand by the reader
       publishedAt: DateTime.tryParse(row['published_at'] as String? ?? '')
           ?.toLocal(),
       provider: provider,
-      hasFullText: row['full_text_available'] as bool? ?? false,
+      hasFullBody: row['full_text_available'] as bool? ?? false,
       sourceIconUrl: row['source_icon_url'] as String? ?? '',
       // Server-generated (Phase 10); null on rows not yet summarised. The
       // feed RPC and the saves→articles(*) join both surface these.

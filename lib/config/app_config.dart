@@ -23,13 +23,11 @@ abstract final class AppConfig {
     return (value == null || value.isEmpty) ? null : value;
   }
 
-  /// Shared secret for the guardian-body Edge Function (x-body-secret
-  /// header), which fetches Guardian article bodies for the reader. NOT a
-  /// news-API key — the Guardian and NewsData keys live exclusively in Edge
-  /// Function secrets and must never return to this bundle. This value only
-  /// gates the body proxy against anonymous scripted calls; it deliberately
-  /// unlocks nothing else (ingest-news and embed keep their own secrets).
-  static String? get bodyFnSecret => _key('BODY_FN_SECRET');
+  // NOTE: the app bundle now holds NO function secrets at all. BODY_FN_SECRET
+  // left with the guardian-body proxy in Phase 15.1 (there is no native reader
+  // and no Guardian API, so nothing to fetch a body for). Every remaining
+  // Edge Function is server-invoked and keeps its own server-only secret —
+  // don't reintroduce one here.
 
   static String? get supabaseUrl => _key('SUPABASE_URL');
 

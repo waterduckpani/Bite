@@ -2,12 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bite/main.dart';
-import 'package:bite/screens/reader_screen.dart';
+import 'package:bite/screens/browser_screen.dart';
 import 'package:bite/state/app_state.dart';
 import 'package:bite/widgets/article_card.dart';
 
+import 'fake_webview_platform.dart';
+
 void main() {
-  testWidgets('onboarding → feed → swipe to save/dismiss → saved → reader',
+  // Every story link-outs since Phase 15.1, so the deck's open path builds a
+  // WebViewController. There is no platform implementation under
+  // `flutter test`; this registers an inert one.
+  setUpAll(FakeWebViewPlatform.install);
+
+  testWidgets('onboarding → feed → swipe to save/dismiss → saved → link-out',
       (tester) async {
     final state = AppState();
     await tester.pumpWidget(BiteApp(state: state));
@@ -44,11 +51,12 @@ void main() {
     expect(state.isSaved(second), isFalse);
     expect(state.deck.length, deckSize - 2);
 
-    // Swipe up → opens the reader and keeps the card in the deck.
+    // Swipe up → link-outs to the publisher and keeps the card in the deck.
+    // Phase 15.1: there is no native reader, so this is the ONLY open path.
     final third = state.deck.first;
     await tester.drag(find.byType(ArticleCard).first, const Offset(0, -500));
     await tester.pumpAndSettle();
-    expect(find.byType(ReaderScreen), findsOneWidget);
+    expect(find.byType(BrowserScreen), findsOneWidget);
     expect(find.text(third.headline), findsWidgets);
     await tester.tap(find.byIcon(Icons.arrow_back).last);
     await tester.pumpAndSettle();

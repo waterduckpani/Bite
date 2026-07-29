@@ -1,15 +1,24 @@
-// Bite · Phase 8: server-side news ingestion.
+// Bite · Phase 8: server-side news ingestion. Guardian removed in Phase 15.1.
 //
-// Replaces the client-side feed fetch: pulls Guardian + NewsData on a pg_cron
-// schedule and upserts article METADATA into public.articles. Clients read
-// the ranked deck via get_personalized_feed and never call the news APIs for
-// the feed, so NewsData credit usage is a function of cron frequency, not
-// user count. (The reader's on-demand Guardian body fetch goes through the
-// guardian-body function, so no news-API key ships in the client at all.)
+// WHAT THIS FUNCTION IS NOW
+//
+// A NewsData-only ingester that is currently switched OFF. The Guardian Open
+// Platform integration that used to live here was removed in Phase 15.1 — the
+// licensed API is gone and Guardian is ingested as an ordinary RSS publisher
+// by ingest-rss, like every other outlet. Its pg_cron job (bite-ingest-news)
+// is unscheduled in migration 0018, because with NewsData disabled every run
+// of this function is a no-op.
+//
+// It is kept, not deleted, for the same reason NewsData was disabled rather
+// than removed (migration 0006): the allowlist, the request grouping, the
+// rotating credit window and the credit accounting below are the expensive
+// part of that integration, and they are all still correct. Re-enabling is a
+// flag, a feed filter and a cron line — see the note on SOURCE_ENABLED.
+//
+// Upserts article METADATA into public.articles. Clients read the ranked deck
+// via get_personalized_feed and never call a news API.
 //
 // The quality pipeline:
-//   - Guardian: configured sections only, real articles only (no liveblogs
-//     or galleries).
 //   - NewsData: a strict source ALLOWLIST (NEWSDATA_ALLOWLIST below) applied
 //     via domainurl on the request — only curated, non-paywalled outlets are
 //     ever fetched. The free tier caps domainurl at 5 domains per request, so
@@ -17,10 +26,8 @@
 //     window of NEWSDATA_GROUPS_PER_RUN groups to stay inside the daily
 //     credit budget. datatype=news is still enforced on the response to drop
 //     press releases even from allowlisted domains.
-//   - Dedup: same story across outlets keeps the Guardian copy (it carries
-//     licensed full text), matched by title-token Jaccard similarity.
-// Storage order is irrelevant — ranking happens in get_personalized_feed —
-// so the client's interleave/quality-sort steps are intentionally absent.
+//   - Junk filter: shared with ingest-rss via ../_shared/junk.ts.
+// Storage order is irrelevant — ranking happens in get_personalized_feed.
 //
 // Embeddings: the upsert fires the Phase 7 statement-level triggers on
 // public.articles, which invoke the "embed" function for any new rows, so
@@ -30,7 +37,7 @@
 //
 // Invoked with an empty POST by the pg_cron job (via pg_net); gated by the
 // INGEST_SECRET header like the embed function. Deploy with --no-verify-jwt.
-// Secrets: GUARDIAN_API_KEY, NEWSDATA_API_KEY, INGEST_SECRET.
+// Secrets: NEWSDATA_API_KEY, INGEST_SECRET.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -39,19 +46,18 @@ import {
 } from "../_shared/junk.ts";
 
 // -- Ingestion source config -------------------------------------------------
-// Which providers the scheduled ingestion actually fetches. Flip a source to
-// `false` to stop pulling it WITHOUT removing the integration — set it back to
-// `true` to re-enable. Everything below (the NewsData allowlist, fetch, dedup
-// and junk filter) stays wired up behind this switch; only the handler's fetch
-// call is gated on it.
+// Flip a source to `false` to stop pulling it WITHOUT removing the
+// integration — set it back to `true` to re-enable. Everything below (the
+// allowlist, fetch and junk filter) stays wired up behind this switch; only
+// the handler's fetch call is gated on it.
 //
-// NewsData is disabled for the dev phase (Guardian-only). Rows already in the
-// pool from earlier NewsData runs are hidden from the live deck by a
+// NewsData is disabled for the dev phase. Rows already in the pool from
+// earlier NewsData runs are hidden from the live deck by a
 // `source <> 'newsdata'` filter in get_personalized_feed (migration 0006) —
 // they're kept, not deleted, so any saved NewsData cards survive. Re-enabling
-// here should be paired with dropping that feed filter.
+// here must be paired with dropping that feed filter AND re-scheduling the
+// bite-ingest-news cron that migration 0018 unscheduled.
 const SOURCE_ENABLED = {
-  guardian: true,
   newsdata: false,
 } as const;
 
@@ -165,7 +171,7 @@ function allowlistEntry(domain: string): string | null {
 
 interface ArticleRow {
   id: string;
-  source: "guardian" | "newsdata";
+  source: "newsdata";
   source_name: string;
   category: string;
   title: string;
@@ -177,103 +183,17 @@ interface ArticleRow {
   source_icon_url: string;
   full_text_available: boolean;
   published_at: string | null;
-  // Guardian keyword tag ids (e.g. "world/russia"). Omitted for sources with
-  // no tags — the column defaults to '{}'. Phase 13 tracker matching leans on
-  // these as its strongest same-story signal.
-  tags?: string[];
   // never `embedding` — upserts must leave existing vectors untouched
 }
 
-function plainText(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .trim();
-}
-
 // -- Junk / low-quality filter (Phase 9) ------------------------------------
-// Applied to EVERY fetched article (Guardian + NewsData) BEFORE dedup, upsert
-// and embedding — a junk hit means the row is never stored and never embedded.
+// Applied to EVERY fetched article BEFORE upsert and embedding — a junk hit
+// means the row is never stored and never embedded.
 //
 // The rules themselves moved to ../_shared/junk.ts in Phase 14 so that RSS
 // ingestion applies the SAME filter rather than a second copy that drifts.
 // That was a pure code move: rules, order, matching and log format are
 // unchanged from Phase 9. Tune the lists there.
-
-// -- Guardian (full-text licensed; dev tier allows 5,000 calls/day) ----------
-
-const GUARDIAN_SECTIONS: Record<string, string> = {
-  technology: "tech",
-  world: "world",
-  business: "business",
-  sport: "sports",
-  science: "science",
-  culture: "entertainment",
-  film: "entertainment",
-  music: "entertainment",
-  "tv-and-radio": "entertainment",
-  books: "entertainment",
-  games: "entertainment",
-};
-
-async function fetchGuardian(apiKey: string): Promise<ArticleRow[]> {
-  const params = new URLSearchParams({
-    "api-key": apiKey,
-    section: Object.keys(GUARDIAN_SECTIONS).join("|"),
-    // No body field: ingestion stores metadata only.
-    "show-fields": "trailText,byline,thumbnail,wordcount",
-    // Keyword tags feed Phase 13 tracker matching (same-story signal).
-    "show-tags": "keyword",
-    "page-size": "30",
-    "order-by": "newest",
-  });
-  const res = await fetch(`https://content.guardianapis.com/search?${params}`);
-  if (!res.ok) throw new Error(`Guardian HTTP ${res.status}`);
-  const response = (await res.json()).response;
-  if (response?.status !== "ok") {
-    throw new Error(`Guardian status ${response?.status}`);
-  }
-
-  const rows: ArticleRow[] = [];
-  for (const item of response.results ?? []) {
-    const category = GUARDIAN_SECTIONS[item.sectionId];
-    if (!category) continue;
-    // Real articles only. The client used to skip items whose body parsed to
-    // no paragraphs; without fetching bodies, the type field is the
-    // equivalent filter for liveblogs/galleries/video pages.
-    if (item.type !== "article") continue;
-
-    const fields = item.fields ?? {};
-    const wordcount = parseInt(`${fields.wordcount ?? ""}`, 10) || 0;
-    const byline = (fields.byline ?? "").trim();
-    const tags: string[] = (item.tags ?? [])
-      .map((t: { id?: string }) => t.id ?? "")
-      .filter((id: string) => id.length > 0);
-    rows.push({
-      id: `guardian:${item.id}`,
-      source: "guardian",
-      source_name: "The Guardian",
-      category,
-      title: item.webTitle ?? "",
-      snippet: plainText(fields.trailText ?? ""),
-      image_url: fields.thumbnail ?? "",
-      original_url: item.webUrl ?? "",
-      author: byline || "The Guardian",
-      read_minutes: Math.min(30, Math.max(1, Math.ceil(wordcount / 220))),
-      source_icon_url: "",
-      full_text_available: true,
-      published_at: item.webPublicationDate ?? null,
-      tags,
-    });
-  }
-  return rows;
-}
 
 // -- NewsData (headlines-only license; free tier: 200 credits/day) ----------
 
@@ -473,42 +393,6 @@ async function fetchNewsdata(apiKey: string): Promise<NewsdataRun> {
   };
 }
 
-// -- Cross-outlet dedup (Guardian preferred: it carries full text) ----------
-
-const STOPWORDS = new Set([
-  "a", "an", "and", "as", "at", "be", "by", "for", "from", "in", "is",
-  "it", "of", "on", "the", "to", "with", "after", "over", "says", "say",
-]);
-
-function titleTokens(title: string): Set<string> {
-  return new Set(
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9 ]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 1 && !STOPWORDS.has(w)),
-  );
-}
-
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 || b.size === 0) return 0;
-  let intersection = 0;
-  for (const t of a) if (b.has(t)) intersection++;
-  return intersection / (a.size + b.size - intersection);
-}
-
-function dedupe(preferred: ArticleRow[], secondary: ArticleRow[]): ArticleRow[] {
-  const kept: ArticleRow[] = [];
-  const seen = preferred.map((r) => titleTokens(r.title));
-  for (const candidate of secondary) {
-    const tokens = titleTokens(candidate.title);
-    if (seen.some((s) => jaccard(s, tokens) >= 0.5)) continue;
-    kept.push(candidate);
-    seen.push(tokens);
-  }
-  return kept;
-}
-
 // -- Handler -----------------------------------------------------------------
 
 Deno.serve(async (req) => {
@@ -517,7 +401,6 @@ Deno.serve(async (req) => {
     return new Response("forbidden", { status: 403 });
   }
 
-  const guardianKey = Deno.env.get("GUARDIAN_API_KEY");
   const newsdataKey = Deno.env.get("NEWSDATA_API_KEY");
 
   const emptyRun: NewsdataRun = {
@@ -528,56 +411,48 @@ Deno.serve(async (req) => {
     offAllowlistDropped: [],
   };
 
-  // Each source is guarded independently: one outlet failing (or its key
-  // missing) never blocks the other.
-  const [guardianResult, newsdataResult] = await Promise.allSettled([
-    SOURCE_ENABLED.guardian && guardianKey
-      ? fetchGuardian(guardianKey)
-      : Promise.resolve([]),
-    // Gated by SOURCE_ENABLED.newsdata (disabled for the dev phase). The key
-    // check stays so a missing NEWSDATA_API_KEY is still a no-op, not a throw.
+  // Gated by SOURCE_ENABLED.newsdata (disabled for the dev phase). The key
+  // check stays so a missing NEWSDATA_API_KEY is still a no-op, not a throw.
+  const newsdataResult = await Promise.allSettled([
     SOURCE_ENABLED.newsdata && newsdataKey
       ? fetchNewsdata(newsdataKey)
       : Promise.resolve(emptyRun),
   ]);
-  const guardian =
-    guardianResult.status === "fulfilled" ? guardianResult.value : [];
-  const newsdataRun =
-    newsdataResult.status === "fulfilled" ? newsdataResult.value : emptyRun;
-  const errors = [guardianResult, newsdataResult]
+  const run = newsdataResult[0].status === "fulfilled"
+    ? newsdataResult[0].value
+    : emptyRun;
+  const errors = newsdataResult
     .filter((r) => r.status === "rejected")
     .map((r) => `${(r as PromiseRejectedResult).reason}`);
-  errors.push(...newsdataRun.groupErrors);
+  errors.push(...run.groupErrors);
 
-  // Per-source article counts for this run's NewsData window — makes the
-  // function logs answer "which allowlisted sources actually return stories".
+  // Per-source article counts for this run's window — makes the function logs
+  // answer "which allowlisted sources actually return stories".
   const sourceCounts: Record<string, number> = {};
-  for (const row of newsdataRun.rows) {
+  for (const row of run.rows) {
     const domain = domainOf(row.original_url);
     sourceCounts[domain] = (sourceCounts[domain] ?? 0) + 1;
   }
   console.log(
-    `[ingest-news] newsdata credits=${newsdataRun.creditsUsed}` +
-      ` groups=${JSON.stringify(newsdataRun.groupsFetched)}` +
+    `[ingest-news] newsdata credits=${run.creditsUsed}` +
+      ` groups=${JSON.stringify(run.groupsFetched)}` +
       ` sources=${JSON.stringify(sourceCounts)}` +
-      ` offAllowlistDropped=${JSON.stringify(newsdataRun.offAllowlistDropped)}` +
-      (newsdataRun.groupErrors.length
-        ? ` groupErrors=${JSON.stringify(newsdataRun.groupErrors)}`
+      ` offAllowlistDropped=${JSON.stringify(run.offAllowlistDropped)}` +
+      (run.groupErrors.length
+        ? ` groupErrors=${JSON.stringify(run.groupErrors)}`
         : ""),
   );
 
-  // Junk / low-quality filter — applied to BOTH sources before dedup, upsert
-  // and embedding, so junk never reaches storage or spends an embed call.
+  // Junk / low-quality filter — applied before upsert and embedding, so junk
+  // never reaches storage or spends an embed call.
   const junk: JunkSummary = { total: 0, byCategory: {}, samplesByCategory: {} };
-  const guardianClean = filterJunk(guardian, junk);
-  const newsdataClean = filterJunk(newsdataRun.rows, junk);
+  const rows = filterJunk(run.rows, junk);
   console.log(
     `[ingest-news] junk dropped=${junk.total}` +
       ` byCategory=${JSON.stringify(junk.byCategory)}` +
       ` samples=${JSON.stringify(junk.samplesByCategory)}`,
   );
 
-  const rows = [...guardianClean, ...dedupe(guardianClean, newsdataClean)];
   let upserted = 0;
   if (rows.length > 0) {
     // Service role: ingestion writes bypass RLS (clients can still upsert
@@ -597,16 +472,15 @@ Deno.serve(async (req) => {
   }
 
   return Response.json({
-    guardian: guardianClean.length,
-    newsdata: rows.length - guardianClean.length,
+    newsdata: rows.length,
     upserted,
     errors,
     junk_dropped: junk.total,
     junk_by_category: junk.byCategory,
     junk_samples: junk.samplesByCategory,
-    newsdata_credits: newsdataRun.creditsUsed,
-    newsdata_groups: newsdataRun.groupsFetched,
+    newsdata_credits: run.creditsUsed,
+    newsdata_groups: run.groupsFetched,
     newsdata_sources: sourceCounts,
-    off_allowlist_dropped: newsdataRun.offAllowlistDropped,
+    off_allowlist_dropped: run.offAllowlistDropped,
   });
 });

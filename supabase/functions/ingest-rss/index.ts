@@ -1,10 +1,9 @@
 // Bite · Phase 14: publisher-direct RSS ingestion.
 //
-// Separate from ingest-news (Guardian) on purpose: different cadence, different
-// legal posture, different failure modes. Guardian is licensed full text with a
-// native reader; everything here is LINK-OUT ONLY. Nothing in this file can
-// change the Guardian path, and a total failure here leaves the Guardian deck
-// working exactly as before.
+// Since Phase 15.1 this is the ONLY ingestion path that runs. The licensed
+// Guardian Open Platform API is gone and the Guardian is qualified, registered
+// and ingested here like every other publisher — same robots checks, same
+// honest User-Agent, same filters, same link-out. There is no second tier.
 //
 // The governing principle is that Bite is a REFERRER, not a replacement. That
 // shows up here as three concrete rules:
@@ -73,8 +72,8 @@ const MAX_ARTICLES_PER_RUN_TOTAL = 25;
 const MAX_ITEM_AGE_HOURS = 48;
 
 /// Window of existing rows checked for cross-source duplicates. Wider than
-/// MAX_ITEM_AGE_HOURS so a story Guardian filed early still suppresses the
-/// RSS copy filed later.
+/// MAX_ITEM_AGE_HOURS so a story one publisher filed early still suppresses
+/// another's copy of it filed later.
 const DEDUP_WINDOW_HOURS = 72;
 
 /// Consecutive walled/refused body fetches after which a publisher is treated
@@ -246,9 +245,9 @@ interface ArticleRow {
   published_at: string | null;
   publisher_id: string;
   rss_categories: string[];
-  // `tags` is deliberately NOT set. It is Guardian tag space; writing RSS
-  // categories into it would silently break tracker matching (see the note on
-  // run_tracker_matching in migration 0013).
+  // `tags` is deliberately NOT set. Nothing writes it since Phase 15.1 (it
+  // was Guardian API tag space) and tracker matching no longer reads it —
+  // matching is embedding-only. rss_categories is where feed sections go.
 }
 
 interface Publisher {
@@ -256,6 +255,9 @@ interface Publisher {
   name: string;
   canonical_domain: string;
   rss_url: string;
+  /// Phase 15.1 — extra section feeds. Empty means "use rss_url" (the
+  /// single-feed case, which is every Phase 14 publisher). See feedsOf.
+  rss_urls: string[] | null;
   full_text_allowed: boolean;
   robots_checked_at: string | null;
   robots_crawl_delay: number | null;
@@ -393,6 +395,14 @@ interface PublisherRun {
   error?: string;
 }
 
+/// The feed URLs to ingest for a publisher: rss_urls when it lists any,
+/// otherwise the single rss_url. Kept as one helper so there is exactly one
+/// answer to "which feeds does this publisher have".
+function feedsOf(publisher: Publisher): string[] {
+  const many = (publisher.rss_urls ?? []).filter((u) => u && u.length > 0);
+  return many.length > 0 ? many : [publisher.rss_url];
+}
+
 async function fetchPublisher(
   supabase: Db,
   publisher: Publisher,
@@ -414,35 +424,62 @@ async function fetchPublisher(
 
   run.robots = await refreshRobots(supabase, publisher, log);
 
-  // The feed may live on a different host (rss.dw.com, feeds.feedburner.com);
-  // that host's robots.txt governs fetching it.
-  const feedUri = new URL(publisher.rss_url);
-  const publisherHost = new URL(`https://www.${publisher.canonical_domain}`).host;
-  const feedRobots = feedUri.host === publisherHost
-    ? run.robots
-    : await fetchRobots(`${feedUri.protocol}//${feedUri.host}`);
+  // Every feed this publisher runs. One publisher may serve several section
+  // feeds (the Guardian does); they are merged here, BEFORE the age, opinion,
+  // junk, dedup and fair-share passes, so all of those keep binding on the
+  // publisher rather than on the feed. Six Guardian feeds must not mean six
+  // times the slate share.
+  const feeds = feedsOf(publisher);
+  const items: RssItem[] = [];
+  const feedErrors: string[] = [];
 
-  if (!robotsAllows(feedRobots, feedUri.pathname)) {
-    run.error = `robots.txt disallows the feed path ${feedUri.pathname}`;
-    log.push(`[ingest-rss] SKIP publisher=${publisher.id} ${run.error}`);
-    return run;
+  for (const feedUrl of feeds) {
+    // A feed may live on a different host (rss.dw.com, feeds.feedburner.com);
+    // that host's robots.txt governs fetching it.
+    const feedUri = new URL(feedUrl);
+    const publisherHost = new URL(`https://www.${publisher.canonical_domain}`).host;
+    const feedRobots = feedUri.host === publisherHost
+      ? run.robots
+      : await fetchRobots(`${feedUri.protocol}//${feedUri.host}`);
+
+    if (!robotsAllows(feedRobots, feedUri.pathname)) {
+      feedErrors.push(`${feedUrl}: robots.txt disallows ${feedUri.pathname}`);
+      log.push(
+        `[ingest-rss] SKIP publisher=${publisher.id} feed=${feedUrl}` +
+          ` robots.txt disallows ${feedUri.pathname}`,
+      );
+      continue;
+    }
+
+    await politeWait(feedUri.host, crawlDelayMs(feedRobots.crawlDelaySeconds));
+    const res = await botFetch(feedUrl);
+    if (!res.ok) {
+      feedErrors.push(
+        `${feedUrl}: HTTP ${res.status}${res.error ? ` (${res.error})` : ""}`,
+      );
+      log.push(
+        `[ingest-rss] SKIP publisher=${publisher.id} feed=${feedUrl}` +
+          ` HTTP ${res.status}`,
+      );
+      continue;
+    }
+
+    const parsed = parseFeed(res.body);
+    if (parsed.length === 0) {
+      feedErrors.push(`${feedUrl}: parsed to zero items`);
+      log.push(
+        `[ingest-rss] publisher=${publisher.id} feed=${feedUrl} parsed to zero items`,
+      );
+      continue;
+    }
+    items.push(...parsed);
   }
 
-  await politeWait(feedUri.host, crawlDelayMs(feedRobots.crawlDelaySeconds));
-  const res = await botFetch(publisher.rss_url);
-  if (!res.ok) {
-    run.error = `feed HTTP ${res.status}${res.error ? ` (${res.error})` : ""}`;
-    log.push(`[ingest-rss] SKIP publisher=${publisher.id} ${run.error}`);
-    return run;
-  }
-
-  const items = parseFeed(res.body);
   run.fetched = items.length;
-  if (items.length === 0) {
-    run.error = "feed parsed to zero items";
-    log.push(`[ingest-rss] publisher=${publisher.id} ${run.error}`);
-    return run;
-  }
+  // One dead section feed must never take the publisher down; only a total
+  // failure is a publisher-level error.
+  if (feedErrors.length > 0) run.error = feedErrors.join("; ");
+  if (items.length === 0) return run;
 
   const cutoff = Date.now() - MAX_ITEM_AGE_HOURS * 3_600_000;
   const rows: ArticleRow[] = [];
@@ -608,8 +645,9 @@ Deno.serve(async (req) => {
   const { data: publisherRows, error: publisherError } = await supabase
     .from("publishers")
     .select(
-      "id, name, canonical_domain, rss_url, full_text_allowed, robots_checked_at," +
-        " robots_crawl_delay, robots_rules, max_per_run, body_wall_streak",
+      "id, name, canonical_domain, rss_url, rss_urls, full_text_allowed," +
+        " robots_checked_at, robots_crawl_delay, robots_rules, max_per_run," +
+        " body_wall_streak",
     )
     .eq("enabled", true)
     .order("id");
@@ -647,9 +685,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 2. Dedupe against what is already in the pool — INCLUDING Guardian, which
-  //    always wins: it is the copy with licensed full text and a native
-  //    reader, so an RSS duplicate of a Guardian story adds nothing.
+  // 2. Dedupe against what is already in the pool. Whoever filed first wins —
+  //    with every source now link-out RSS there is no privileged copy of a
+  //    story, so "already there" is the only tiebreak that means anything.
   const since = new Date(Date.now() - DEDUP_WINDOW_HOURS * 3_600_000)
     .toISOString();
   const { data: existingRows } = await supabase

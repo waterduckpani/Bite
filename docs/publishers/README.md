@@ -8,6 +8,12 @@ and update the report before changing any registry row.
 ```bash
 dart run tools/qualify_publisher.dart --all          # the full candidate slate
 dart run tools/qualify_publisher.dart thehindu.com   # one domain
+
+# One exact feed, for a publisher that runs several (discovery only ever finds
+# the first feed that parses):
+dart run tools/qualify_publisher.dart theguardian.com \
+    --feed=https://www.theguardian.com/world/rss \
+    --slug=theguardian.com-world --name="The Guardian (world)"
 ```
 
 Checked on **2026-07-25** with the honest User-Agent
@@ -16,15 +22,58 @@ Checked on **2026-07-25** with the honest User-Agent
 ## Governing principle
 
 Bite is a **referrer, not a replacement**. Every publisher below is link-out
-only: their bite is capped at 80 words, their name is on the card, and swiping
+only — and since Phase 15.1 so is every story in the app, from any source: their bite is capped at 80 words, their name is on the card, and swiping
 up opens their page. The measurable output of this phase is per-publisher
 click-through rate (`publisher_ctr()` — see the root README).
+
+## The Guardian — added in Phase 15.1 (migration 0018)
+
+The Guardian was in Bite from the start via the **Open Platform API**: licensed
+full text, a native in-app reader, an API key in Edge Function secrets. Phase
+15.1 dropped that API and kept the content. Guardian is now an ordinary
+publisher here, held to exactly the same bar as everyone else — and it is the
+first registry row with **more than one feed**, because it publishes per
+section rather than one firehose.
+
+Checked **2026-07-28**. All six section feeds PASS:
+
+| Feed | Items parsed | Mode | `full_text_allowed` |
+| --- | --- | --- | --- |
+| [`/world/rss`](theguardian.com-world.md) | 45 | body-fetch-allowed | **true** |
+| [`/business/rss`](theguardian.com-business.md) | 39 | body-fetch-allowed | **true** |
+| [`/technology/rss`](theguardian.com-technology.md) | 27 | body-fetch-allowed | **true** |
+| [`/science/rss`](theguardian.com-science.md) | 27 | body-fetch-allowed | **true** |
+| [`/sport/rss`](theguardian.com-sport.md) | 53 | body-fetch-allowed | **true** |
+| [`/culture/rss`](theguardian.com-culture.md) | 69 | body-fetch-allowed | **true** |
+
+Registry row: `theguardian`, GLOBAL, `max_per_run = 6` (one per section on a
+typical run). The id is deliberately **not** `guardian` — that is the legacy
+value in `articles.source` for API-era rows, and a CTR report must not read the
+two as one thing.
+
+Notes worth carrying forward:
+
+- The feeds are **description-only** (0 of 45 world items carried
+  `content:encoded`), and robots.txt allows article paths with no stated
+  `Crawl-delay`. So Guardian joins DW as a publisher that routinely exercises
+  the body fetch — for **summariser input only**. That verdict is
+  robots-derived, re-checked by `ingest-rss` every `ROBOTS_CACHE_HOURS`, and it
+  puts no body in front of a reader.
+- The **items/day figures in these reports are not usable** for Guardian. The
+  section feeds carry a long evergreen tail (the sport feed spans years), which
+  drags the span-based estimate to ~0/day. What actually bounds a run is
+  `MAX_ITEM_AGE_HOURS = 48` plus `max_per_run`, not the feed length.
+- Guardian is a **ninth publisher sharing the same
+  `MAX_ARTICLES_PER_RUN_TOTAL = 25`**, not an addition to it. Total daily
+  volume is unchanged and still tied to `DAILY_SUMMARY_CAP`; Guardian takes a
+  share of it. Its freshness also drops from the old 30-minute API cron to the
+  3-hourly RSS cycle.
 
 ## Selected — seeded into migration 0013
 
 Eight publishers, an even IN/GLOBAL split, spread deliberately across the
 political spectrum. `lean` is recorded for auditability only; nothing at
-runtime reads it.
+runtime reads it. (The Guardian above makes nine.)
 
 | Publisher | Region | Lean | Feed | Mode | `full_text_allowed` | ~items/day | `max_per_run` |
 | --- | --- | --- | --- | --- | --- | --- | --- |

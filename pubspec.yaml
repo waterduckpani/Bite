@@ -26,6 +26,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # Test-only: lets flow_test register an inert WebViewPlatform. Since Phase
+  # 15.1 every story opens in the in-app browser, so any end-to-end test builds
+  # a WebViewController, and `flutter test` has no platform implementation.
+  webview_flutter_platform_interface: ^2.15.1
 
 flutter:
   uses-material-design: true

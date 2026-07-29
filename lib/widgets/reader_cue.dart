@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../models/article.dart';
 import '../theme/app_theme.dart';
 
-/// Tiny pill that tells the reader where a story opens, driven off the SAME
-/// flag ([Article.hasFullText]) that routes the native reader vs. the in-app
-/// browser (Phase 6) — never off the source name, so the cue can't disagree
-/// with where the tap actually goes.
+/// Tiny pill naming where a story opens: **"Read at {publisher}"**, always.
 ///
-///   full-text (native reader) → "Read in Bite"  (accent tint)
-///   link-out                  → "Read at {source}"  (quiet neutral)
+/// It used to branch on [Article.hasFullBody] — "Read in Bite" for full-text
+/// stories, "Read at {source}" for the rest. Phase 15.1 removed the native
+/// reader, so there is nothing to branch on: every story opens at the
+/// publisher. The branch is gone rather than left pointing at a flag that no
+/// longer decides anything, which is what let the cue and the tap disagree.
 class ReaderCue extends StatelessWidget {
   const ReaderCue({super.key, required this.article});
 
@@ -18,28 +18,22 @@ class ReaderCue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bite = context.bite;
-    final inBite = article.hasFullText;
-    final label = inBite ? 'Read in Bite' : 'Read at ${article.source}';
-    final fg = inBite ? bite.accent : bite.muted;
+    final fg = bite.muted;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: (inBite ? bite.accent : bite.muted).withValues(alpha: 0.10),
+        color: bite.muted.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            inBite ? Icons.bolt_rounded : Icons.open_in_new_rounded,
-            size: 12,
-            color: fg,
-          ),
+          Icon(Icons.open_in_new_rounded, size: 12, color: fg),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
-              label,
+              'Read at ${article.source}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: sans(size: 11, weight: FontWeight.w600, color: fg),
@@ -61,8 +55,8 @@ class ReaderCue extends StatelessWidget {
 /// a hint you could miss. Tap is equivalent to swipe-up (Phase 11), and both
 /// open the publisher's real page in the in-app browser.
 ///
-/// Driven off [Article.hasFullText] like [ReaderCue], so the promise it makes
-/// can never disagree with where the gesture actually goes.
+/// Shown on EVERY card since Phase 15.1 — there is no other kind of story —
+/// so the promise it makes cannot disagree with where the gesture goes.
 class LinkOutCue extends StatelessWidget {
   const LinkOutCue({super.key, required this.article});
 

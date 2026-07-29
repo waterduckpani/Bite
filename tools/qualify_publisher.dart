@@ -27,7 +27,15 @@
 //   dart run tools/qualify_publisher.dart --all          # the candidate slate
 //   dart run tools/qualify_publisher.dart --json thehindu.com
 //
-// Reports are written to docs/publishers/<domain>.md unless --no-write.
+// Phase 15.1 — a publisher may run SEVERAL section feeds off one domain (the
+// Guardian does). Discovery only ever finds the first feed that parses, so an
+// exact feed can be named instead, and its report gets its own file:
+//
+//   dart run tools/qualify_publisher.dart theguardian.com \
+//       --feed=https://www.theguardian.com/world/rss --slug=theguardian.com-world
+//
+// Reports are written to docs/publishers/<slug>.md (slug defaults to the
+// domain) unless --no-write.
 
 import 'dart:convert';
 import 'dart:io';
@@ -64,12 +72,26 @@ const Duration kTimeout = Duration(seconds: 20);
 
 class Candidate {
   const Candidate(this.domain, this.name, this.region, this.lean, this.why,
-      {this.feedHint});
+      {this.feedHint, this.feedOnly = false, String? slug})
+      : _slug = slug;
   final String domain;
   final String name;
   final String region; // IN | GLOBAL
   final String lean;
   final String why;
+
+  /// When true, discovery is SKIPPED and only [feedHint] is probed. Used when
+  /// a publisher runs several section feeds off one domain and each has to be
+  /// qualified on its own terms — discovery would just return the first one
+  /// that parses, six times over.
+  final bool feedOnly;
+
+  final String? _slug;
+
+  /// Report filename stem under docs/publishers/. Defaults to the domain; a
+  /// per-feed run needs its own so the six Guardian sections don't overwrite
+  /// each other.
+  String get slug => _slug ?? domain;
 
   /// An explicitly known feed URL, tried before discovery. Needed for
   /// publishers whose feed lives on a separate host (DW, CSM) or at a path
@@ -667,12 +689,14 @@ Future<Report> qualify(Candidate candidate) async {
   final candidates = <String>[
     if (candidate.feedHint != null) candidate.feedHint!,
   ];
-  for (final o in {origin, apex}) {
-    final home = await fetch(o);
-    if (home.ok) candidates.addAll(declaredFeeds(home.body, Uri.parse(o)));
-  }
-  for (final o in {origin, apex}) {
-    candidates.addAll(kCommonFeedPaths.map((p) => '$o$p'));
+  if (!candidate.feedOnly) {
+    for (final o in {origin, apex}) {
+      final home = await fetch(o);
+      if (home.ok) candidates.addAll(declaredFeeds(home.body, Uri.parse(o)));
+    }
+    for (final o in {origin, apex}) {
+      candidates.addAll(kCommonFeedPaths.map((p) => '$o$p'));
+    }
   }
 
   final seen = <String>{};
@@ -936,23 +960,45 @@ String renderMarkdown(Report r, DateTime at) {
 // Entry point
 // ---------------------------------------------------------------------------
 
+/// `--name=value` → `value`, or null when the flag is absent.
+String? _flagValue(List<String> args, String name) {
+  for (final a in args) {
+    if (a.startsWith('$name=')) return a.substring(name.length + 1);
+  }
+  return null;
+}
+
 Future<void> main(List<String> args) async {
   final jsonOut = args.contains('--json');
   final noWrite = args.contains('--no-write');
   final all = args.contains('--all');
+  final feed = _flagValue(args, '--feed');
+  final slug = _flagValue(args, '--slug');
   final domains = args.where((a) => !a.startsWith('--')).toList();
+
+  // --feed names ONE exact feed, so it only makes sense with one domain.
+  if (feed != null && domains.length != 1) {
+    stderr.writeln('--feed=<url> takes exactly one domain.');
+    exit(64);
+  }
 
   final targets = <Candidate>[
     if (all) ...kCandidates,
     for (final d in domains)
-      kCandidates.firstWhere(
-        (c) => c.domain == d,
-        orElse: () => Candidate(d, d, 'GLOBAL', 'unclassified', 'ad-hoc check'),
-      ),
+      if (feed != null)
+        Candidate(d, _flagValue(args, '--name') ?? d, 'GLOBAL',
+            _flagValue(args, '--lean') ?? 'unclassified', 'named-feed check',
+            feedHint: feed, feedOnly: true, slug: slug)
+      else
+        kCandidates.firstWhere(
+          (c) => c.domain == d,
+          orElse: () => Candidate(d, d, 'GLOBAL', 'unclassified', 'ad-hoc check'),
+        ),
   ];
   if (targets.isEmpty) {
     stderr.writeln('usage: dart run tools/qualify_publisher.dart '
-        '[--all] [--json] [--no-write] <domain> ...');
+        '[--all] [--json] [--no-write] [--feed=<url> [--slug=<name>]] '
+        '<domain> ...');
     exit(64);
   }
 
@@ -968,7 +1014,7 @@ Future<void> main(List<String> args) async {
     if (!noWrite) {
       final dir = Directory('docs/publishers');
       if (!dir.existsSync()) dir.createSync(recursive: true);
-      File('docs/publishers/${candidate.domain}.md')
+      File('docs/publishers/${candidate.slug}.md')
           .writeAsStringSync(renderMarkdown(report, at));
     }
   }

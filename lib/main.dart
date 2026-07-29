@@ -4,7 +4,7 @@ import 'config/app_config.dart';
 import 'models/article.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/reader_screen.dart';
+import 'screens/browser_screen.dart';
 import 'screens/tracker_detail_screen.dart';
 import 'screens/tracker_management_screen.dart';
 import 'services/user_data_repository.dart';
@@ -71,7 +71,7 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  /// Dev convenience: `--dart-define=BITE_AUTO_OPEN=guardian|newsdata|rss|mock`
+  /// Dev convenience: `--dart-define=BITE_AUTO_OPEN=rss|mock|guardian|newsdata`
   /// opens the first matching story once content arrives, for simulator
   /// verification without tap tooling.
   static const _autoOpen = String.fromEnvironment('BITE_AUTO_OPEN');
@@ -167,15 +167,16 @@ class _RootState extends State<_Root> {
     }
     if (_autoOpen.isNotEmpty && !_opened && state.onboarded && !state.hydrating) {
       final provider = switch (_autoOpen) {
+        // `rss` is the only provider new rows get. The other two only match
+        // rows left over from the retired Guardian-API / NewsData ingesters,
+        // which are useful for checking those still link out cleanly.
+        'rss' => ArticleProvider.rss,
         'guardian' => ArticleProvider.guardian,
         'newsdata' => ArticleProvider.newsdata,
-        // Phase 14 link-out story: exercises the browser route rather than
-        // the native reader, since these are never rendered in-app.
-        'rss' => ArticleProvider.rss,
         _ => ArticleProvider.mock,
       };
-      // Saved stories first: they hydrate body-less from Supabase, so this
-      // also exercises the reader's on-demand body re-fetch.
+      // Saved stories first, so this also covers the hydrated-from-Supabase
+      // path rather than only fresh deck rows.
       final match = [...state.saved, ...state.deck]
           .where((a) => a.provider == provider)
           .firstOrNull;
@@ -183,7 +184,7 @@ class _RootState extends State<_Root> {
         _opened = true;
         if (_autoFollow) state.followStory(match);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) ReaderScreen.open(context, match);
+          if (mounted) BrowserScreen.open(context, match);
         });
       }
     }

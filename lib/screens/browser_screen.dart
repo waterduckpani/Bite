@@ -10,19 +10,29 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
 import '../widgets/cover_art.dart';
+import '../widgets/follow_story_button.dart';
 import '../widgets/glass.dart';
 import '../widgets/pressable.dart';
 
-/// In-app browser for headline-only stories (NewsData.io and friends).
+/// How EVERY story opens, since Phase 15.1: the publisher's own page.
 ///
-/// Licensing requires the publisher's real page, unmodified — no reader
-/// mode, no ad stripping, no script injection. Bite only wraps the page in
-/// its own chrome: a source bar with a load-progress hairline on top, and a
-/// Save / Share / open-externally action row below.
+/// There is no longer a second tier. Bite is a referrer, not a replacement,
+/// so it shows the publisher's real page, unmodified — no reader mode, no ad
+/// stripping, no script injection. Bite only wraps the page in its own
+/// chrome: a source bar with a load-progress hairline on top, and a
+/// Save / Follow / Share / open-externally action row below.
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key, required this.article});
 
   final Article article;
+
+  /// Opens [article] at the publisher. THE single entry point — the Phase 6
+  /// full-text/link-out router is gone, so there is no branch here and no way
+  /// for a card's cue to disagree with where the tap goes.
+  static Future<void> open(BuildContext context, Article article) {
+    return Navigator.of(context, rootNavigator: true)
+        .push(articleRoute(BrowserScreen(article: article)));
+  }
 
   @override
   State<BrowserScreen> createState() => _BrowserScreenState();
@@ -125,6 +135,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     curve: BiteMotion.easeOut,
                     child: _LoadingPane(
                       article: article,
+                      active: showOverlay,
                       failed: _failed,
                       onRetry: _retry,
                       onOpenExternally: _openExternally,
@@ -166,6 +177,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  FollowStoryButton(article: article),
                   const SizedBox(width: 12),
                   Builder(
                     builder: (buttonContext) => _CircleButton(
@@ -319,12 +332,21 @@ class _Favicon extends StatelessWidget {
 class _LoadingPane extends StatelessWidget {
   const _LoadingPane({
     required this.article,
+    required this.active,
     required this.failed,
     required this.onRetry,
     required this.onOpenExternally,
   });
 
   final Article article;
+
+  /// Whether this pane is still the visible layer. Once the page lands the
+  /// pane stays MOUNTED (it holds the Hero landing pad) but fades to nothing —
+  /// and a CircularProgressIndicator left in an invisible subtree keeps a
+  /// ticker running for as long as the story is open. So the spinner is built
+  /// only while it is actually doing something.
+  final bool active;
+
   final bool failed;
   final VoidCallback onRetry;
   final VoidCallback onOpenExternally;
@@ -401,7 +423,7 @@ class _LoadingPane extends StatelessWidget {
                       ),
                     ],
                   ),
-                ] else
+                ] else if (active)
                   Row(
                     children: [
                       SizedBox(
