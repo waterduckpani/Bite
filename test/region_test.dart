@@ -40,7 +40,10 @@ void main() {
 
   testWidgets('onboarding offers all six regions and records the choice',
       (tester) async {
-    final state = AppState();
+    // Phase 17 put a login gate and a walkthrough in front of onboarding.
+    // Both are stepped past here so this stays a test of the region picker.
+    final state = AppState()..continueAsGuest();
+    state.markGestureTutorialSeen(persist: false);
     await tester.pumpWidget(BiteApp(state: state));
 
     for (final region in Region.values) {
@@ -62,7 +65,9 @@ void main() {
 
   testWidgets('region is editable after onboarding and preserves reading state',
       (tester) async {
-    final state = AppState()..completeOnboarding({}, persist: false);
+    final state = AppState()
+      ..continueAsGuest()
+      ..completeOnboarding({}, persist: false);
     state.markGestureTutorialSeen(persist: false);
     await tester.pumpWidget(BiteApp(state: state));
     await tester.pumpAndSettle();
@@ -90,7 +95,9 @@ void main() {
   testWidgets("profile's region selector renders and works in light and dark",
       (tester) async {
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {
-      final state = AppState()..completeOnboarding({}, persist: false);
+      final state = AppState()
+        ..continueAsGuest()
+        ..completeOnboarding({}, persist: false);
       state
         ..markGestureTutorialSeen(persist: false)
         ..setThemeMode(mode);

@@ -131,7 +131,7 @@ class UserDataRepository {
   /// that account. Throws [AuthException] on failure (e.g. rate limits).
   Future<EmailOtpMode> sendEmailOtp(String email) async {
     if (!await _ensureSession()) {
-      throw const AuthException('No connection — try again in a moment.');
+      throw const AuthException('No connection. Try again in a moment.');
     }
     if (accountEmail == null) {
       try {
@@ -185,7 +185,7 @@ class UserDataRepository {
   /// see the activation checklist there before flipping the flag.
   Future<bool> signInWithApple() async {
     if (!await _ensureSession()) {
-      throw const AuthException('No connection — try again in a moment.');
+      throw const AuthException('No connection. Try again in a moment.');
     }
     final rawNonce = _client.auth.generateRawNonce();
     final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
@@ -642,7 +642,7 @@ class UserDataRepository {
       id: id,
       headline: row['title'] as String? ?? '',
       source: sourceName,
-      author: author.isNotEmpty ? author : (sourceName.isNotEmpty ? sourceName : '—'),
+      author: author.isNotEmpty ? author : (sourceName.isNotEmpty ? sourceName : 'Unknown'),
       category: category,
       imageUrl: row['image_url'] as String? ?? '',
       snippet: row['snippet'] as String? ?? '',

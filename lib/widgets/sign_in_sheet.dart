@@ -109,8 +109,8 @@ class _SignInSheetState extends State<SignInSheet> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_mode == EmailOtpMode.linkToGuest
-            ? 'Signed in — your saves came with you'
-            : 'Welcome back — signed in as $_email'),
+            ? 'Signed in. Your saves came with you.'
+            : 'Welcome back. Signed in as $_email.'),
       ));
     } catch (e) {
       if (!mounted) return;
@@ -124,14 +124,14 @@ class _SignInSheetState extends State<SignInSheet> {
   String _friendly(Object e) {
     if (e is AuthException) {
       return switch (e.code) {
-        'otp_expired' => 'That code has expired — send a new one.',
+        'otp_expired' => 'That code has expired. Send a new one.',
         'over_email_send_rate_limit' =>
-          'Too many emails just now — wait a minute and try again.',
+          'Too many emails just now. Wait a minute and try again.',
         'otp_disabled' => 'No account exists for this email yet.',
         _ => e.message,
       };
     }
-    return 'Something went wrong — check your connection and try again.';
+    return 'Something went wrong. Check your connection and try again.';
   }
 
   @override
@@ -207,7 +207,7 @@ class _SignInSheetState extends State<SignInSheet> {
       const SizedBox(height: 12),
       Center(
         child: Text(
-          'No password — we\'ll email you a code.',
+          'No password. We\'ll email you a code.',
           style: sans(size: 11.5, color: bite.faint),
         ),
       ),
@@ -219,8 +219,8 @@ class _SignInSheetState extends State<SignInSheet> {
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(switched
-          ? 'Welcome back — signed in with Apple'
-          : 'Signed in with Apple — your saves came with you'),
+          ? 'Welcome back. Signed in with Apple.'
+          : 'Signed in with Apple. Your saves came with you.'),
     ));
   }
 
@@ -229,7 +229,7 @@ class _SignInSheetState extends State<SignInSheet> {
       Text('What\'s your email?', style: display(size: 24, weight: 640)),
       const SizedBox(height: 6),
       Text(
-        'We\'ll send a 6-digit code — no password to remember.',
+        'We\'ll send a 6-digit code, no password to remember.',
         style: sans(size: 13.5, color: bite.muted, height: 1.5),
       ),
       const SizedBox(height: 20),
@@ -380,7 +380,7 @@ class _AppleButton extends StatelessWidget {
       ),
       onPressed: enabled ? () => _signIn(context) : null,
       icon: const Icon(Icons.apple, size: 22),
-      label: Text(enabled ? 'Continue with Apple' : 'Apple — coming soon'),
+      label: Text(enabled ? 'Continue with Apple' : 'Apple (coming soon)'),
     );
     return enabled ? Pressable(child: button) : button;
   }

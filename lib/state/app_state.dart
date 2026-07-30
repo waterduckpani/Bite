@@ -25,8 +25,29 @@ class AppState extends ChangeNotifier {
 
   bool onboarded = false;
 
+  /// Whether the user has come through the Phase 17 login screen in this
+  /// session (as a guest, or by signing in).
+  ///
+  /// Deliberately NOT a new persisted column. An onboarded profile can only
+  /// exist on the far side of the gate, so hydration derives it from
+  /// `onboarded` instead: one less thing to migrate, and nothing to go stale.
+  /// Signing out clears it, which is what puts a logged-out user back on the
+  /// login screen rather than silently into a fresh guest deck.
+  bool _passedLoginGate = false;
+
+  bool get pastLoginGate => _passedLoginGate;
+
+  /// "Continue as guest": the anonymous session is created lazily by the
+  /// repository on the first write/read, so this only has to open the gate.
+  void continueAsGuest() {
+    if (_passedLoginGate) return;
+    _passedLoginGate = true;
+    notifyListeners();
+  }
+
   /// Highest gesture-tutorial version this user has seen (0 = never). The
-  /// coach-mark shows while this is below [FeedConfig.gestureTutorialVersion].
+  /// walkthrough runs while this is below
+  /// [FeedConfig.gestureTutorialVersion].
   int _seenTutorialVersion = 0;
 
   /// True while startup hydration from Supabase is in flight — the root
@@ -95,6 +116,9 @@ class AppState extends ChangeNotifier {
     final data = await repo.hydrate();
     if (data != null) {
       onboarded = onboarded || data.onboarded;
+      // A returning user with a profile has already chosen guest-or-sign-in
+      // once; don't ask again on every launch.
+      _passedLoginGate = _passedLoginGate || data.onboarded;
       // Never regress a local acknowledgement: hydration can land after the
       // user has already dismissed the coach-mark (or after the dev
       // skip-tutorial flag set it), and overwriting would pop it back up.
@@ -257,13 +281,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Whether the first-run gesture coach-mark should be shown: the user is
-  /// past onboarding but hasn't seen the current gesture mapping explained.
-  bool get shouldShowGestureTutorial =>
-      onboarded && _seenTutorialVersion < FeedConfig.gestureTutorialVersion;
+  /// Whether the Phase 17 interactive walkthrough should run: the user is
+  /// through the login gate but hasn't been taught the current gesture
+  /// mapping.
+  ///
+  /// Gated on the LOGIN gate rather than on `onboarded`, because the
+  /// walkthrough now runs BEFORE the interest/region picker: a reader is shown
+  /// how the deck works before being asked what they want in it.
+  bool get shouldShowWalkthrough =>
+      _passedLoginGate &&
+      _seenTutorialVersion < FeedConfig.gestureTutorialVersion;
 
-  /// Marks the current gesture tutorial as seen (persisted), so it won't
-  /// re-show until [FeedConfig.gestureTutorialVersion] is bumped.
+  /// Marks the current walkthrough as seen (persisted), so it won't re-run
+  /// until [FeedConfig.gestureTutorialVersion] is bumped. Completing and
+  /// skipping both land here: a skip is a decision, not a deferral.
   ///
   /// [persist] is false for the dev skip-tutorial flag, so a dev boot never
   /// writes the acknowledgement to the real profile — same discipline as
@@ -547,6 +578,7 @@ class AppState extends ChangeNotifier {
       _resetLocal();
       await hydrate();
     }
+    _passedLoginGate = true;
     notifyListeners();
   }
 
@@ -559,6 +591,7 @@ class AppState extends ChangeNotifier {
       _resetLocal();
       await hydrate();
     }
+    _passedLoginGate = true;
     notifyListeners();
     return switched;
   }
@@ -581,13 +614,25 @@ class AppState extends ChangeNotifier {
     _taste = null;
     _repo.setOnboarded();
     _repo.replaceCategoryPrefs(selectedCategories);
+    // The walkthrough teaches the app, not the account: someone who has
+    // already been through it must not sit through it again just because they
+    // signed out. Carried onto the fresh guest profile alongside the topic and
+    // region picks, for the same reason.
+    if (_seenTutorialVersion > 0) {
+      _repo.setGestureTutorialSeen(_seenTutorialVersion);
+    }
     await _repo.setRegion(region);
+    // Signing out means being logged out, and a logged-out user is shown the
+    // login screen rather than dropped into an unexplained guest deck.
+    _passedLoginGate = false;
     deckEpoch++;
     notifyListeners();
   }
 
   void _resetLocal() {
     onboarded = false;
+    // Not the login gate: this runs when the device signs INTO an existing
+    // account, which is itself passing the gate.
     _seenTutorialVersion = 0;
     selectedCategories.clear();
     region = Region.global;

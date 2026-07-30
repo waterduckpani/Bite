@@ -223,7 +223,7 @@ class _StalePrompt extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'No new coverage has matched this story in a while. It may have '
-            'run its course — or it may pick up again.',
+            'run its course, or it may pick up again.',
             style: sans(size: 12.5, height: 1.45, color: bite.muted),
           ),
           const SizedBox(height: 4),
@@ -236,7 +236,7 @@ class _StalePrompt extends StatelessWidget {
                   ScaffoldMessenger.of(context)
                     ..hideCurrentSnackBar()
                     ..showSnackBar(const SnackBar(
-                      content: Text('Muted — history kept'),
+                      content: Text('Muted. History kept.'),
                       duration: Duration(milliseconds: 1400),
                     ));
                 },

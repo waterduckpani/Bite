@@ -165,7 +165,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 4),
           Text(
             'Lifts coverage from your part of the world a little higher. '
-            'A nudge, not a filter — every source still appears.',
+            'A nudge, not a filter, so every source still appears.',
             style: sans(size: 12.5, color: bite.muted),
           ),
           const SizedBox(height: 12),
@@ -190,7 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text('APPEARANCE', style: caps(size: 11, color: bite.muted)),
           const SizedBox(height: 4),
           Text(
-            'Testing only — resets to Auto next launch.',
+            'Testing only. Resets to Auto next launch.',
             style: sans(size: 12.5, color: bite.muted),
           ),
           const SizedBox(height: 12),
@@ -257,7 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final messenger = ScaffoldMessenger.of(context);
                   await state.signOut();
                   messenger.showSnackBar(const SnackBar(
-                    content: Text('Signed out — browsing as a guest'),
+                    content: Text('Signed out. Browsing as a guest.'),
                   ));
                 },
                 icon: const Icon(Icons.logout, size: 18),
@@ -268,7 +268,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 32),
           Center(
             child: Text(
-              'Bite 0.1.0 — ${switch (state.status) {
+              'Bite 0.1.0 · ${switch (state.status) {
                 ContentStatus.live =>
                   'live stories from publisher feeds',
                 ContentStatus.loading => 'fetching live stories…',
@@ -383,7 +383,7 @@ class _AlgorithmSection extends StatelessWidget {
     if (!available) return 'Needs an account to learn anything';
     final profile = taste;
     if (profile == null) return loading ? 'Reading your swipes…' : 'Tap to view';
-    if (profile.isEmpty) return 'Nothing learned yet — swipe a few stories';
+    if (profile.isEmpty) return 'Nothing learned yet. Swipe a few stories';
     final signals =
         '${profile.totalSignals} ${profile.totalSignals == 1 ? 'signal' : 'signals'}';
     if (profile.isLearning) return 'Still learning · $signals';
@@ -501,7 +501,7 @@ class _AlgorithmSheet extends StatelessWidget {
     if (!available) {
       return Text(
         'Swipe history lives with your account. Without one, the feed ranks on '
-        'your topics and recency only — nothing is learned between launches.',
+        'your topics and recency only, and nothing is learned between launches.',
         style: sans(size: 13, height: 1.5, color: bite.muted),
       );
     }
@@ -513,7 +513,7 @@ class _AlgorithmSheet extends StatelessWidget {
     }
     if (profile.isEmpty) {
       return Text(
-        'Nothing yet. Swipe a few stories and this fills in — what you read, '
+        'Nothing yet. Swipe a few stories and this fills in. What you read, '
         'save and open pulls the feed toward it; what you skip pushes it away.',
         style: sans(size: 13, height: 1.5, color: bite.muted),
       );
@@ -561,7 +561,7 @@ class _AlgorithmSheet extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Nothing read, saved or opened here yet — these stories are ranked '
+            'Nothing read, saved or opened here yet, so these stories are ranked '
             'on your topic picks and recency alone.',
             style: sans(size: 11.5, height: 1.45, color: bite.faint),
           ),
@@ -596,7 +596,7 @@ class _AlgorithmSheet extends StatelessWidget {
             ),
           const SizedBox(height: 4),
           Text(
-            'Outlets are an outcome, not an input — Bite never ranks by '
+            'Outlets are an outcome, not an input. Bite never ranks by '
             'publisher.',
             style: sans(size: 11.5, height: 1.45, color: bite.faint),
           ),
@@ -630,7 +630,7 @@ class _LearningNotice extends StatelessWidget {
       ),
       child: Text(
         remaining == 0
-            ? 'Still learning — your feed is ranked on topics and recency.'
+            ? 'Still learning. Your feed is ranked on topics and recency.'
             : '$remaining more ${remaining == 1 ? 'story' : 'stories'} read, '
                 'saved or opened and the feed starts ranking on your taste. '
                 'Until then it goes on topics and recency.',
@@ -691,7 +691,7 @@ class _SignalCounts extends StatelessWidget {
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            'Counted over your last ${FeedConfig.swipeWindow} swipes — the same '
+            'Counted over your last ${FeedConfig.swipeWindow} swipes, the same '
             'window the ranker uses.',
             style: sans(size: 11.5, height: 1.45, color: bite.faint),
           ),
@@ -788,7 +788,7 @@ class _GuestPrompt extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Browsing as a guest — sign in to keep your saves across devices.',
+            'Browsing as a guest. Sign in to keep your saves across devices.',
             style: sans(size: 13.5, color: bite.ink, height: 1.45),
           ),
           const SizedBox(height: 14),

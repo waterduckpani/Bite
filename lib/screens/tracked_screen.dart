@@ -410,7 +410,7 @@ class _EmptyTracked extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Open any story and tap the bell to follow it. '
-              'New developments on it collect here — a running timeline, '
+              'New developments on it collect here: a running timeline, '
               'separate from your feed.',
               textAlign: TextAlign.center,
               style: sans(size: 13.5, height: 1.5, color: bite.muted),

@@ -35,10 +35,32 @@ const double kBiteTabBarReserved = kBiteTabBarHeight + 20;
 /// Rendered as a Liquid Glass capsule that content scrolls behind on iOS 26,
 /// and as a solid paper capsule on other platforms.
 class BiteTabBar extends StatelessWidget {
-  const BiteTabBar({super.key, required this.index, required this.onChanged});
+  const BiteTabBar(
+      {super.key,
+      required this.index,
+      required this.onChanged,
+      this.itemKeys});
 
+  /// The selected tab, or any out-of-range value for "none selected" (the
+  /// walkthrough's tour starts with nothing chosen).
   final int index;
+
   final ValueChanged<int> onChanged;
+
+  /// Optional per-tab keys, so a caller can measure where a tab actually sits.
+  ///
+  /// The Phase 17 walkthrough spotlights one tab at a time on the REAL tab
+  /// bar, and a spotlight has to be cut out of the real geometry: guessing it
+  /// from "five equal columns" would drift the moment the bar's padding or the
+  /// safe-area inset changed. Ignored (and unmeasured) when null, which is
+  /// every live use.
+  final List<GlobalKey>? itemKeys;
+
+  /// How many tabs the bar has, for callers that walk them.
+  static int get tabCount => _tabs.length;
+
+  /// The tab labels, in bar order.
+  static List<String> get tabLabels => [for (final t in _tabs) t.label];
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +78,9 @@ class BiteTabBar extends StatelessWidget {
               children: [
                 for (var i = 0; i < _tabs.length; i++)
                   Expanded(
+                    key: itemKeys != null && i < itemKeys!.length
+                        ? itemKeys![i]
+                        : null,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
                       onTap: () {

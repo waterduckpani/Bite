@@ -15,6 +15,8 @@ class BiteColors extends ThemeExtension<BiteColors> {
     required this.border,
     required this.card,
     required this.glass,
+    required this.scrim,
+    required this.onScrim,
     required this.danger,
   });
 
@@ -53,6 +55,16 @@ class BiteColors extends ThemeExtension<BiteColors> {
   /// this must never be swapped for an opaque colour.
   final Color glass;
 
+  /// Dimming layer behind a modal or a coach mark. DARK IN BOTH THEMES, which
+  /// is why it cannot be derived from [ink]: ink is near-white in dark mode, so
+  /// a scrim built from it lightens the screen instead of dimming it and
+  /// inverts the figure and ground of anything spotlighted through it.
+  final Color scrim;
+
+  /// Text and glyphs drawn ON [scrim]. Light in both themes, for the same
+  /// reason: what sits on the scrim is over a dark layer either way.
+  final Color onScrim;
+
   /// Destructive affordances (delete swipe, skip cue).
   final Color danger;
 
@@ -67,6 +79,8 @@ class BiteColors extends ThemeExtension<BiteColors> {
     border: Color(0xFFEAE7E0),
     card: Color(0xFFFFFFFF),
     glass: Color(0xC4FFFFFF),
+    scrim: Color(0xA31C1B19),
+    onScrim: Color(0xFFFBFAF7),
     danger: Color(0xFFC07B6A),
   );
 
@@ -81,6 +95,8 @@ class BiteColors extends ThemeExtension<BiteColors> {
     border: Color(0xFF2C2A27),
     card: Color(0xFF1F1E1C),
     glass: Color(0xC42B2926),
+    scrim: Color(0xB3060605),
+    onScrim: Color(0xFFECE9E3),
     danger: Color(0xFFC98A79),
   );
 
@@ -99,6 +115,8 @@ class BiteColors extends ThemeExtension<BiteColors> {
     Color? border,
     Color? card,
     Color? glass,
+    Color? scrim,
+    Color? onScrim,
     Color? danger,
   }) {
     return BiteColors(
@@ -112,6 +130,8 @@ class BiteColors extends ThemeExtension<BiteColors> {
       border: border ?? this.border,
       card: card ?? this.card,
       glass: glass ?? this.glass,
+      scrim: scrim ?? this.scrim,
+      onScrim: onScrim ?? this.onScrim,
       danger: danger ?? this.danger,
     );
   }
@@ -130,6 +150,8 @@ class BiteColors extends ThemeExtension<BiteColors> {
       border: Color.lerp(border, other.border, t)!,
       card: Color.lerp(card, other.card, t)!,
       glass: Color.lerp(glass, other.glass, t)!,
+      scrim: Color.lerp(scrim, other.scrim, t)!,
+      onScrim: Color.lerp(onScrim, other.onScrim, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
     );
   }

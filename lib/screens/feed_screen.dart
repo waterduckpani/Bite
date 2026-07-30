@@ -11,7 +11,6 @@ import '../theme/motion.dart';
 import '../widgets/article_card.dart';
 import '../widgets/bite_tab_bar.dart';
 import '../widgets/category_chip.dart';
-import '../widgets/gesture_tutorial.dart';
 import '../widgets/glass.dart';
 import '../widgets/pressable.dart';
 import 'browser_screen.dart';
@@ -192,11 +191,12 @@ class _FeedScreenState extends State<FeedScreen> {
           right: 16,
           child: _GlassHeader(onFilter: () => _showFilters(context)),
         ),
-        // First-run gesture coach-mark, over a live (dimmed) deck so the four
-        // gestures are taught against the cards they act on. Waits for a deck
-        // so the cards peek behind the blur.
-        if (state.shouldShowGestureTutorial && !_finished && _deck.isNotEmpty)
-          GestureTutorial(onDismiss: state.markGestureTutorialSeen),
+        // Phase 17 moved the first-run teaching OFF the live deck entirely.
+        // It used to be a static coach-mark blurred over these cards; it is
+        // now an interactive walkthrough on a sandboxed deck, run before this
+        // screen is ever reached (see WalkthroughScreen). Nothing overlays the
+        // real deck any more, so a real card is never swiped by accident while
+        // learning what a swipe does.
       ],
     );
   }

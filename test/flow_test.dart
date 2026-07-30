@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bite/main.dart';
 import 'package:bite/screens/browser_screen.dart';
+import 'package:bite/screens/walkthrough_screen.dart';
 import 'package:bite/state/app_state.dart';
 import 'package:bite/widgets/article_card.dart';
 
@@ -14,10 +15,21 @@ void main() {
   // `flutter test`; this registers an inert one.
   setUpAll(FakeWebViewPlatform.install);
 
-  testWidgets('onboarding → feed → swipe to save/dismiss → saved → link-out',
+  testWidgets('login → onboarding → feed → swipe → saved → link-out',
       (tester) async {
     final state = AppState();
     await tester.pumpWidget(BiteApp(state: state));
+
+    // Phase 17: the app opens on the login gate. Guest is the working path.
+    expect(find.text('Continue as guest'), findsOneWidget);
+    await tester.tap(find.text('Continue as guest'));
+    await tester.pumpAndSettle();
+
+    // Past the gate the walkthrough runs. It is covered by walkthrough_test;
+    // here it is skipped, which is what a real skip does too.
+    expect(find.byType(WalkthroughScreen), findsOneWidget);
+    state.markGestureTutorialSeen();
+    await tester.pumpAndSettle();
 
     // Onboarding: pick two topics and continue.
     await tester.tap(find.text('Tech'));
@@ -25,11 +37,6 @@ void main() {
     await tester.tap(find.text('World'));
     await tester.pump();
     await tester.tap(find.textContaining('Continue with 2'));
-    await tester.pumpAndSettle();
-
-    // Dismiss the first-run gesture coach-mark, which otherwise sits over the
-    // deck and absorbs swipes.
-    state.markGestureTutorialSeen();
     await tester.pumpAndSettle();
 
     // Feed shows a card stack filtered to the picked topics.
