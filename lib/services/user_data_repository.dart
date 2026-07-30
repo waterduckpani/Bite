@@ -10,7 +10,7 @@ import '../config/app_config.dart';
 import '../data/mock_articles.dart';
 import '../data/palettes.dart';
 import '../models/article.dart';
-import '../models/country.dart';
+import '../models/region.dart';
 import '../models/story_tracker.dart';
 
 /// How an email OTP will resolve once verified.
@@ -31,9 +31,10 @@ class HydratedUserData {
     required this.seenTutorialVersion,
     required this.categories,
     required this.saved,
+    required this.savedAt,
     required this.dismissedIds,
     required this.trackers,
-    required this.country,
+    required this.region,
   });
 
   final bool onboarded;
@@ -46,14 +47,19 @@ class HydratedUserData {
   /// Saved articles, oldest save first (matches AppState's internal order).
   final List<Article> saved;
 
+  /// When each save happened, keyed by article id — what the Saved screen
+  /// sorts "recently saved" by. Insertion order alone can't survive a
+  /// hydration that interleaves with local saves.
+  final Map<String, DateTime> savedAt;
+
   /// Reject-swiped (left) article ids since the last feed reset.
   final Set<String> dismissedIds;
 
   /// Story trackers, newest-activity first (Phase 13).
   final List<StoryTracker> trackers;
 
-  /// The user's selected country (defaults to [Country.global]).
-  final Country country;
+  /// The user's selected region (defaults to [Region.global], no boost).
+  final Region region;
 }
 
 /// Supabase-backed persistence for per-user state, with anonymous auth as
@@ -269,9 +275,17 @@ class UserDataRepository {
                 case final a?)
               a,
         ],
+        savedAt: {
+          for (final row in results[2] as List)
+            if (_articleFromRow(row['articles'] as Map<String, dynamic>)
+                case final a?)
+              if (DateTime.tryParse(row['saved_at'] as String? ?? '')
+                  case final at?)
+                a.id: at.toLocal(),
+        },
         dismissedIds: {for (final row in dismissed) row['article_id'] as String},
         trackers: trackers,
-        country: Country.fromName(profile?['country'] as String?),
+        region: Region.fromTag(profile?['region'] as String?),
       );
       debugPrint('UserDataRepository: hydrated onboarded=${data.onboarded}, '
           '${data.categories.length} prefs, ${data.saved.length} saves, '
@@ -280,6 +294,31 @@ class UserDataRepository {
       return data;
     } catch (e) {
       debugPrint('UserDataRepository: hydrate failed ($e); in-memory.');
+      return null;
+    }
+  }
+
+  /// The reader's own swipe history, joined to each article's topic and
+  /// outlet, newest first — what the Profile screen reconstructs their taste
+  /// profile from. Read-only and self-scoped by RLS.
+  ///
+  /// Fetches more rows than the server's window uses, because rows whose
+  /// article has since been purged carry no topic and would otherwise silently
+  /// shrink the sample.
+  Future<List<Map<String, dynamic>>?> fetchSwipeHistory({int limit = 300}) async {
+    if (!_enabled) return null;
+    try {
+      if (!await _ensureSession()) return null;
+      final rows = await _client
+          .from('swipe_events')
+          .select('direction, created_at, articles(category, source_name)')
+          .eq('user_id', _uid)
+          .order('created_at', ascending: false)
+          .limit(limit)
+          .timeout(const Duration(seconds: 8));
+      return [for (final row in rows) row];
+    } catch (e) {
+      debugPrint('UserDataRepository: swipe history failed ($e)');
       return null;
     }
   }
@@ -412,14 +451,36 @@ class UserDataRepository {
         }));
   }
 
-  /// Persists the user's selected country (Part E). Stored as the enum name;
-  /// the feed RPC matches it against publisher section labels and article URL
-  /// paths for the mild country nudge.
-  void setCountry(Country country) {
-    _enqueue(() => _client.from('profiles').upsert({
-          'id': _uid,
-          'country': country.name,
-        }));
+  /// Persists the user's selected region (Phase 16) and RESOLVES once the
+  /// server has it. Stored as the registry TAG ('GLOBAL' | 'US' | 'UK' | 'EU'
+  /// | 'IN' | 'AU'), not the enum name, so get_personalized_feed compares it
+  /// directly against publishers.region — one vocabulary, no mapping table to
+  /// drift out of sync.
+  ///
+  /// AWAITED, unlike every other write here, and that is the whole point.
+  /// The rest are fire-and-forget through the offline queue because the client
+  /// already knows the answer and doesn't need the round trip. This one is
+  /// different: the region boost is applied SERVER-side — get_personalized_feed
+  /// reads profiles.region — so Part E's instant re-rank would race the write
+  /// and re-query under the OLD region, making a deliberate change look like it
+  /// did nothing.
+  ///
+  /// The queue is still the fallback: a failed direct write is enqueued, so the
+  /// preference is never lost — it just takes effect on the next query rather
+  /// than this one.
+  Future<void> setRegion(Region region) async {
+    if (!_enabled) return;
+    final row = {'id': _uid, 'region': region.tag};
+    try {
+      if (!await _ensureSession()) throw StateError('no session');
+      await _client
+          .from('profiles')
+          .upsert(row)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('UserDataRepository: region write deferred to queue ($e)');
+      _enqueue(() => _client.from('profiles').upsert(row));
+    }
   }
 
   /// Persists that the user has seen the gesture tutorial at [version].

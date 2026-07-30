@@ -50,9 +50,6 @@ class BiteTabBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: GlassSurface(
-          borderRadius: 28,
-          blur: 10,
-          thickness: 18,
           child: SizedBox(
             height: kBiteTabBarHeight,
             child: Row(

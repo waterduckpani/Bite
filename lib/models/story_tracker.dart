@@ -19,6 +19,10 @@ class StoryTracker {
     this.unreadCount = 0,
     this.latestTitle,
     this.latestAt,
+    this.seedSource,
+    this.latestSource,
+    this.sourceCount = 0,
+    this.firstMatchedAt,
   });
 
   final String id;
@@ -42,6 +46,35 @@ class StoryTracker {
   /// Headline + time of the most recent development, for the list row.
   final String? latestTitle;
   final DateTime? latestAt;
+
+  /// The outlet the story was followed from — its origin. Null when the seed
+  /// article has been purged from the pool (the tracker outlives it).
+  final String? seedSource;
+
+  /// The outlet that filed the most recent development.
+  final String? latestSource;
+
+  /// Distinct outlets across the whole timeline — how widely the story has
+  /// been picked up.
+  final int sourceCount;
+
+  /// When the first development landed. Distinct from [createdAt]: that is
+  /// when the READER started following, this is when the STORY started moving.
+  final DateTime? firstMatchedAt;
+
+  /// Whether the RPC supplied the richer stats. False against a server that
+  /// hasn't run migration 0022 yet, which is the signal for the UI to fall
+  /// back to the plain count-and-time line rather than render empty stats.
+  bool get hasStats => sourceCount > 0;
+
+  /// How long the story has been running, from its first development to its
+  /// most recent. Null until there are two dated ends to measure between.
+  Duration? get span {
+    final from = firstMatchedAt;
+    final to = latestAt;
+    if (from == null || to == null) return null;
+    return to.difference(from);
+  }
 
   /// Activity time used to sort the list (most recent development, or the
   /// creation time for a tracker with no new developments yet).
@@ -81,6 +114,10 @@ class StoryTracker {
         unreadCount: unreadCount ?? this.unreadCount,
         latestTitle: latestTitle ?? this.latestTitle,
         latestAt: latestAt ?? this.latestAt,
+        seedSource: seedSource,
+        latestSource: latestSource,
+        sourceCount: sourceCount,
+        firstMatchedAt: firstMatchedAt,
       );
 
   static StoryTracker? fromRow(Map<String, dynamic> row) {
@@ -99,6 +136,13 @@ class StoryTracker {
       latestTitle: row['latest_title'] as String?,
       latestAt:
           DateTime.tryParse(row['latest_at'] as String? ?? '')?.toLocal(),
+      // Migration 0022. Absent against an older server, which the UI treats as
+      // "no stats to show" rather than as zeroes worth rendering.
+      seedSource: row['seed_source'] as String?,
+      latestSource: row['latest_source'] as String?,
+      sourceCount: (row['source_count'] as num?)?.toInt() ?? 0,
+      firstMatchedAt:
+          DateTime.tryParse(row['first_matched_at'] as String? ?? '')?.toLocal(),
     );
   }
 }

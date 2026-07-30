@@ -6,9 +6,13 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 
 /// "Follow this story" affordance: a circular toggle that seeds a Phase 13
-/// tracker from the article. Follow-only (unfollowing lives in tracker
-/// management, behind a confirm, so history isn't lost by a stray tap) — once
-/// following, it shows a filled accent state and a tap just reaffirms it.
+/// tracker from the article, and unfollows it again on a second tap.
+///
+/// Unfollowing takes the tracker's whole timeline with it, so it goes behind a
+/// confirm rather than happening on a stray tap — but it does happen HERE.
+/// Burying it in tracker management meant the button that turned following on
+/// was not the button that turned it off, which is the one thing a toggle may
+/// not do.
 ///
 /// Lived on the native reader until Phase 15.1 removed it. It moved here
 /// rather than going with it: this is the ONLY place in the app a story can
@@ -36,7 +40,7 @@ class FollowStoryButton extends StatelessWidget {
         onTap: () {
           if (following) {
             HapticFeedback.selectionClick();
-            _snack(context, 'Following this story');
+            _confirmUnfollow(context, state);
             return;
           }
           if (atCap) {
@@ -51,14 +55,53 @@ class FollowStoryButton extends StatelessWidget {
         child: SizedBox(
           width: 44,
           height: 44,
-          child: Icon(
-            following ? Icons.notifications_active : Icons.notifications_none,
-            size: 20,
-            color: following ? bite.onAccent : bite.ink,
+          child: Semantics(
+            button: true,
+            label: following ? 'Stop following this story' : 'Follow this story',
+            child: Icon(
+              following ? Icons.notifications_active : Icons.notifications_none,
+              size: 20,
+              color: following ? bite.onAccent : bite.ink,
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// Same confirm the tracker screens use — the timeline is the thing being
+  /// destroyed, and it reads identically wherever the unfollow is triggered.
+  Future<void> _confirmUnfollow(BuildContext context, AppState state) async {
+    final tracker = state.trackerForArticle(article.id);
+    final collected = tracker == null ? 0 : tracker.articleCount;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Stop following?'),
+        content: Text(
+          collected > 1
+              ? 'This story and the $collected developments collected for it '
+                  'will be removed from Tracked. Saved stories and your '
+                  'reading history are unaffected.'
+              : 'This story will be removed from Tracked. Saved stories and '
+                  'your reading history are unaffected.',
+          style: sans(size: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep following'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Unfollow'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    state.unfollowStory(article.id);
+    _snack(context, 'No longer following this story');
   }
 
   void _snack(BuildContext context, String message) {

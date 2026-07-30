@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 
 import '../config/feed_config.dart';
 import '../data/mock_articles.dart';
 import '../models/article.dart';
-import '../models/country.dart';
+import '../models/region.dart';
 import '../models/story_tracker.dart';
+import '../models/taste_profile.dart';
 import '../services/user_data_repository.dart';
 
 /// Where the current article pool came from.
@@ -33,8 +35,19 @@ class AppState extends ChangeNotifier {
 
   final Set<Category> selectedCategories = {};
 
-  /// The user's country (Part E). [Country.global] applies no feed nudge.
-  Country country = Country.global;
+  /// The user's region (Phase 16). [Region.global] applies no feed boost.
+  Region region = Region.global;
+
+  /// TEMPORARY (dev): appearance override for testing light/dark in-app.
+  /// In-memory only — never persisted, so every launch starts on `system`.
+  ThemeMode themeMode = ThemeMode.system;
+
+  void setThemeMode(ThemeMode mode) {
+    if (themeMode == mode) return;
+    themeMode = mode;
+    notifyListeners();
+  }
+
   // Rejected (swiped-left) cards — cleared by "reset feed", mirroring the
   // server's post-watermark dismissals.
   final Set<String> _dismissedIds = {};
@@ -47,6 +60,12 @@ class AppState extends ChangeNotifier {
 
   // Insertion-ordered so the Saved list shows newest saves first (reversed).
   final List<Article> _saved = [];
+
+  /// When each save happened, keyed by article id. Hydrated from `saves.
+  /// saved_at`; locally-saved rows are stamped at save time. The Saved
+  /// screen's date sorting reads this rather than list order, which a
+  /// hydration landing mid-session would otherwise scramble.
+  final Map<String, DateTime> _savedAt = {};
 
   /// Story trackers (Phase 13). Kept as a self-contained system: nothing here
   /// feeds back into the swipe deck, the taste vector, or feed ranking.
@@ -89,13 +108,16 @@ class AppState extends ChangeNotifier {
       _saved
         ..clear()
         ..addAll(data.saved);
+      _savedAt
+        ..clear()
+        ..addAll(data.savedAt);
       _dismissedIds
         ..clear()
         ..addAll(data.dismissedIds);
       _trackers
         ..clear()
         ..addAll(data.trackers);
-      country = data.country;
+      region = data.region;
     }
     hydrating = false;
     deckEpoch++;
@@ -185,28 +207,54 @@ class AppState extends ChangeNotifier {
   /// [persist] is false for the dev skip-onboarding flag, so a dev boot
   /// never overwrites the real profile/prefs on the server.
   void completeOnboarding(Set<Category> picks,
-      {Country? country, bool persist = true}) {
+      {Region? region, bool persist = true}) {
     selectedCategories
       ..clear()
       ..addAll(picks);
-    if (country != null) this.country = country;
+    if (region != null) this.region = region;
     onboarded = true;
     if (persist) {
       _repo?.setOnboarded();
       _repo?.replaceCategoryPrefs(picks);
-      if (country != null) _repo?.setCountry(country);
+      if (region != null) _repo?.setRegion(region);
     }
     deckEpoch++;
     notifyListeners();
   }
 
-  /// Updates the user's country (Part E) and lightly reweights the feed toward
-  /// its coverage. A no-op nudge for [Country.global].
-  void setCountry(Country value) {
-    if (country == value) return;
-    country = value;
-    _repo?.setCountry(value);
+  /// True while a region change is re-querying the deck, so the selector can
+  /// show that it is working rather than looking inert for a round trip.
+  bool _switchingRegion = false;
+  bool get switchingRegion => _switchingRegion;
+
+  /// Updates the user's region and re-ranks the deck IN PLACE (Phase 16,
+  /// Part E). No restart, no close-and-reopen.
+  ///
+  /// This is a RE-RANK of the same shared pool under a different additive
+  /// boost, not a reset. Nothing here clears anything: the taste vector lives
+  /// server-side and is rebuilt from swipe_events on every query, and the
+  /// saved list, dismissed set and read set are all untouched — so bookmarks
+  /// and swipe state survive the change and only the ORDER of the deck moves.
+  ///
+  /// The write is awaited before the re-query: the boost is applied
+  /// server-side from profiles.region, so re-querying first would rank the new
+  /// deck under the OLD region and the change would appear to do nothing.
+  ///
+  /// [refreshFeed] is forced deliberately. Its 60-second throttle exists to
+  /// stop fast swiping spamming the RPC; a deliberate region change is the
+  /// opposite of that — the user is watching, waiting for it to happen.
+  Future<void> setRegion(Region value) async {
+    if (region == value) return;
+    region = value;
+    _switchingRegion = true;
     notifyListeners();
+    try {
+      await _repo?.setRegion(value);
+      await refreshFeed(force: true);
+    } finally {
+      _switchingRegion = false;
+      notifyListeners();
+    }
   }
 
   /// Whether the first-run gesture coach-mark should be shown: the user is
@@ -306,6 +354,7 @@ class AppState extends ChangeNotifier {
   void save(Article a) {
     if (!isSaved(a)) {
       _saved.add(a);
+      _savedAt[a.id] = DateTime.now();
       _repo?.saveArticle(a);
       notifyListeners();
     }
@@ -313,8 +362,20 @@ class AppState extends ChangeNotifier {
 
   void unsave(Article a) {
     _saved.removeWhere((s) => s.id == a.id);
+    _savedAt.remove(a.id);
     _repo?.removeSave(a.id);
     notifyListeners();
+  }
+
+  /// When [articleId] was saved, or null for a save with no recorded time
+  /// (a pre-existing row hydrated without one).
+  DateTime? savedAtOf(String articleId) => _savedAt[articleId];
+
+  /// Categories actually present in the Saved list — what the Saved screen
+  /// offers as filters, so it never shows a chip that can only ever be empty.
+  List<Category> get savedCategories {
+    final present = {for (final a in _saved) a.category};
+    return [for (final c in Category.values) if (present.contains(c)) c];
   }
 
   void toggleSaved(Article a) => isSaved(a) ? unsave(a) : save(a);
@@ -324,6 +385,34 @@ class AppState extends ChangeNotifier {
     _dismissedIds.clear();
     _repo?.recordFeedReset();
     deckEpoch++;
+    notifyListeners();
+  }
+
+  // -- Taste profile (Profile screen) ----------------------------------------
+  // A read-only mirror of the swipe history the server ranks from. Nothing
+  // here feeds back into ranking — it exists so a reader can see what their
+  // swipes have taught the feed.
+
+  TasteProfile? _taste;
+  bool _loadingTaste = false;
+
+  /// The reader's reconstructed taste profile, or null before the first load.
+  TasteProfile? get taste => _taste;
+
+  bool get loadingTaste => _loadingTaste;
+
+  /// Re-reads the swipe history and rebuilds the profile. Called when Profile
+  /// is opened; safe to call repeatedly (concurrent calls collapse).
+  Future<void> loadTasteProfile() async {
+    final repo = _repo;
+    if (repo == null || !repo.enabled || _loadingTaste) return;
+    _loadingTaste = true;
+    notifyListeners();
+    final rows = await repo.fetchSwipeHistory();
+    // A failed fetch leaves any previously-built profile in place rather than
+    // blanking the section under the reader.
+    if (rows != null) _taste = TasteProfile.fromRows(rows);
+    _loadingTaste = false;
     notifyListeners();
   }
 
@@ -366,6 +455,18 @@ class AppState extends ChangeNotifier {
     ));
     _repo?.createTracker(id, article, title);
     notifyListeners();
+  }
+
+  /// The tracker seeded from [articleId], if this story is followed — what
+  /// the reader's follow toggle unfollows.
+  StoryTracker? trackerForArticle(String articleId) =>
+      _trackers.where((t) => t.seedArticleId == articleId).firstOrNull;
+
+  /// Unfollows the story seeded from [articleId]. Destructive (the timeline
+  /// goes with the tracker), so callers confirm first.
+  void unfollowStory(String articleId) {
+    final tracker = trackerForArticle(articleId);
+    if (tracker != null) deleteTracker(tracker.id);
   }
 
   /// Re-queries the tracker list (counts + latest development) from the server.
@@ -468,6 +569,7 @@ class AppState extends ChangeNotifier {
   Future<void> signOut() async {
     await _repo!.signOut();
     _saved.clear();
+    _savedAt.clear();
     _dismissedIds.clear();
     _readIds.clear();
     _openedIds.clear();
@@ -475,9 +577,11 @@ class AppState extends ChangeNotifier {
     _impressionIds.clear();
     _linkOutIds.clear();
     _trackers.clear();
+    // The taste profile describes the account that just signed out.
+    _taste = null;
     _repo.setOnboarded();
     _repo.replaceCategoryPrefs(selectedCategories);
-    _repo.setCountry(country);
+    await _repo.setRegion(region);
     deckEpoch++;
     notifyListeners();
   }
@@ -486,14 +590,16 @@ class AppState extends ChangeNotifier {
     onboarded = false;
     _seenTutorialVersion = 0;
     selectedCategories.clear();
-    country = Country.global;
+    region = Region.global;
     _saved.clear();
+    _savedAt.clear();
     _dismissedIds.clear();
     _readIds.clear();
     _openedIds.clear();
     _impressionIds.clear();
     _linkOutIds.clear();
     _trackers.clear();
+    _taste = null;
     deckEpoch++;
   }
 }

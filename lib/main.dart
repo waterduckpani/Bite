@@ -4,6 +4,7 @@ import 'config/app_config.dart';
 import 'models/article.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/profile_screen.dart' show showAlgorithmSheet;
 import 'screens/browser_screen.dart';
 import 'screens/tracker_detail_screen.dart';
 import 'screens/tracker_management_screen.dart';
@@ -51,13 +52,19 @@ class BiteApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScope(
       state: state,
-      child: MaterialApp(
-        title: 'Bite',
-        debugShowCheckedModeBanner: false,
-        theme: buildBiteTheme(Brightness.light),
-        darkTheme: buildBiteTheme(Brightness.dark),
-        themeMode: ThemeMode.system,
-        home: const _Root(),
+      // The MaterialApp is the scope's child, so it doesn't rebuild on
+      // notify by itself — this listener is what lets the in-app appearance
+      // toggle (temporary, Profile screen) reach themeMode.
+      child: ListenableBuilder(
+        listenable: state,
+        builder: (context, _) => MaterialApp(
+          title: 'Bite',
+          debugShowCheckedModeBanner: false,
+          theme: buildBiteTheme(Brightness.light),
+          darkTheme: buildBiteTheme(Brightness.dark),
+          themeMode: state.themeMode,
+          home: const _Root(),
+        ),
       ),
     );
   }
@@ -96,6 +103,12 @@ class _RootState extends State<_Root> {
   static const _autoSwipe = String.fromEnvironment('BITE_AUTO_SWIPE');
   bool _swiped = false;
 
+  /// Dev convenience: `--dart-define=BITE_AUTO_ALGORITHM=true` opens the
+  /// Profile algorithm sheet once the taste profile has loaded, for simulator
+  /// verification without tap tooling. Pair with BITE_INITIAL_TAB=4.
+  static const _autoAlgorithm = bool.fromEnvironment('BITE_AUTO_ALGORITHM');
+  bool _algorithmShown = false;
+
   /// Dev convenience: `--dart-define=BITE_AUTO_SIGNIN=sheet|email|code`
   /// opens the sign-in sheet at that stage after boot, for simulator
   /// screenshots of the auth UI without tap tooling.
@@ -105,6 +118,16 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    if (_autoAlgorithm &&
+        !_algorithmShown &&
+        state.onboarded &&
+        !state.hydrating &&
+        state.taste != null) {
+      _algorithmShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showAlgorithmSheet(context);
+      });
+    }
     if (_autoSignIn.isNotEmpty &&
         !_sheetShown &&
         state.onboarded &&

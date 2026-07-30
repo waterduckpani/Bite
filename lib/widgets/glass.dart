@@ -1,67 +1,50 @@
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 import '../theme/app_theme.dart';
 
-/// Whether the running engine can render the real iOS-26 "Liquid Glass"
-/// material.
-///
-/// We only opt in on Apple platforms (iOS 26 / macOS) whose Impeller/Metal
-/// backend can execute fragment shaders. On Android, web and older iOS on
-/// Skia we deliberately fall back to a solid, non-translucent surface so
-/// nothing breaks. [ui.ImageFilter.isShaderFilterSupported] is the same
-/// capability flag `liquid_glass_renderer` checks internally.
-bool get liquidGlassSupported {
-  final onApple = defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-  return onApple && ui.ImageFilter.isShaderFilterSupported;
-}
+/// Corner radius shared by every piece of floating chrome — tab bar, headers,
+/// search fields, action bars. One value so the chrome reads as one system
+/// rather than a pile of separately-rounded boxes.
+const double kGlassRadius = 26;
 
-/// A floating piece of control chrome finished in Liquid Glass where the
-/// platform supports it, and a solid opaque surface everywhere else.
+/// A floating piece of control chrome: a real backdrop blur under a
+/// translucent tint, a hairline edge, and a soft lift shadow.
 ///
-/// This is intended ONLY for chrome that floats over content — tab bars,
-/// headers, action bars, swipe cues. Article content stays solid and
-/// editorial and must never be wrapped in this.
+/// This is intended ONLY for chrome that floats over content. Article content
+/// stays solid and editorial and must never be wrapped in this.
+///
+/// Implemented with [BackdropFilter] rather than the iOS-26 Liquid Glass
+/// shader: the shader renders nothing distinguishable over a near-white paper
+/// background, so in light mode the header simply vanished. A blur plus a
+/// translucent fill reads the same in both themes and on every platform, which
+/// is what "floating chrome" needs to mean here.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
     required this.child,
-    this.borderRadius = 24,
-    this.blur = 8,
-    this.thickness = 16,
+    this.borderRadius = kGlassRadius,
+    this.blur = 18,
     this.tint,
-    this.solidColor,
-    this.solidBorder = true,
+    this.bordered = true,
     this.elevated = true,
   });
 
   final Widget child;
 
-  /// Corner radius of the glass squircle (and of the solid fallback).
+  /// Corner radius of the surface.
   final double borderRadius;
 
-  /// Frost amount of the glass. Ignored by the solid fallback.
+  /// Backdrop blur sigma. Higher frosts more of what scrolls behind.
   final double blur;
 
-  /// Glass thickness — thicker refracts the background more. Ignored by the
-  /// solid fallback.
-  final double thickness;
-
-  /// Glass tint; its alpha controls tint strength. Defaults to a faint white
-  /// frost. Ignored by the solid fallback.
+  /// Overrides the theme's translucent fill. Keep the alpha below ~0.9 or the
+  /// blur behind it stops being visible at all.
   final Color? tint;
 
-  /// Opaque colour used for the non-glass fallback. Defaults to the theme's
-  /// paper colour.
-  final Color? solidColor;
-
-  /// Whether the solid fallback draws a hairline border.
-  final bool solidBorder;
+  /// Draws the hairline edge that separates the glass from what's behind it.
+  final bool bordered;
 
   /// Adds a soft drop shadow so the chrome reads as floating above content.
   final bool elevated;
@@ -70,50 +53,101 @@ class GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final bite = context.bite;
     final radius = BorderRadius.circular(borderRadius);
-    // Airy chrome floats on a whisper of shadow, not a heavy drop.
-    final shadow = elevated
-        ? <BoxShadow>[
-            BoxShadow(
-              color: bite.ink.withValues(alpha: 0.05),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ]
-        : const <BoxShadow>[];
+    final fill = tint ?? bite.glass;
+    // A touch of extra light along the top edge — the cheap trick that makes a
+    // flat translucent panel read as a curved piece of glass.
+    final sheen = Color.alphaBlend(
+      Colors.white.withValues(alpha: 0.14),
+      fill,
+    );
 
-    if (!liquidGlassSupported) {
-      // Clean fallback: fully opaque, non-translucent chrome.
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          color: solidColor ?? bite.paper,
-          borderRadius: radius,
-          border: solidBorder
-              ? Border.all(color: bite.border, width: 0.75)
-              : null,
-          boxShadow: shadow,
-        ),
-        child: ClipRRect(borderRadius: radius, child: child),
-      );
-    }
-
-    // The real thing: a self-contained Liquid Glass layer shaped as a
-    // rounded superellipse. The child is drawn crisply on top of the glass
-    // (glassContainsChild defaults to false).
     return DecoratedBox(
-      decoration: BoxDecoration(borderRadius: radius, boxShadow: shadow),
-      child: LiquidGlass.withOwnLayer(
-        shape: LiquidRoundedSuperellipse(borderRadius: borderRadius),
-        clipBehavior: Clip.antiAlias,
-        settings: LiquidGlassSettings(
-          blur: blur,
-          thickness: thickness,
-          glassColor: tint ?? const Color(0x1AFFFFFF),
-          lightIntensity: 0.7,
-          ambientStrength: 0.12,
-          refractiveIndex: 1.25,
-          saturation: 1.2,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: elevated
+            ? [
+                BoxShadow(
+                  color: bite.ink.withValues(alpha: 0.10),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : const [],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [sheen, fill],
+              ),
+              border: bordered
+                  ? Border.all(
+                      color: bite.ink.withValues(alpha: 0.08),
+                      width: 0.75,
+                    )
+                  : null,
+            ),
+            child: child,
+          ),
         ),
-        child: child,
+      ),
+    );
+  }
+}
+
+/// A search field finished in the same glass as the tab bar and headers, so
+/// the chrome on a screen matches rather than mixing a glass bar with a solid
+/// input box.
+class GlassSearchField extends StatelessWidget {
+  const GlassSearchField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    return GlassSurface(
+      blur: 14,
+      // Sits on the page rather than over scrolling content, so it stays flat
+      // instead of casting a shadow onto the list beneath it.
+      elevated: false,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: sans(size: 14, color: bite.ink),
+        cursorColor: bite.accent,
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: sans(size: 14, color: bite.faint),
+          prefixIcon: Icon(Icons.search, size: 20, color: bite.muted),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: Icon(Icons.close, size: 18, color: bite.muted),
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
       ),
     );
   }
