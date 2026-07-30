@@ -145,6 +145,102 @@ const List<Candidate> kCandidates = [
 ];
 
 // ---------------------------------------------------------------------------
+// Phase 16 candidate slate (--phase16).
+//
+// The regional expansion: the pool goes from 9 publishers to ~25-30, with a
+// selectable region taxonomy (GLOBAL | US | UK | EU | IN | AU) behind an
+// additive ranking boost. `region` here is the tag the registry row will
+// carry, and it is what the boost reads — never a per-article URL guess.
+//
+// Two shapes of entry:
+//   - one row, one feed          — the ordinary case, discovery + feedHint
+//   - one row, SEVERAL feeds     — BBC and the Guardian publish per section,
+//     so each section is qualified on its own terms with feedOnly + slug, the
+//     same way the six Guardian feeds were handled in Phase 15.1.
+//
+// Category specialists (tech / science / business / sport) are tagged GLOBAL:
+// they fill coverage gaps, not regional ones. Tech is deliberately over-served
+// here because it was the thinnest category in the Phase 14/15 pool.
+// ---------------------------------------------------------------------------
+
+const List<Candidate> kPhase16Candidates = [
+  // -- Global core additions -----------------------------------------------
+  Candidate('bbc.com', 'BBC News', 'GLOBAL', 'centrist',
+      'Public broadcaster with the largest international reporting desk in English.',
+      feedHint: 'https://feeds.bbci.co.uk/news/world/rss.xml',
+      feedOnly: true, slug: 'bbc.com-world'),
+  Candidate('bbc.com', 'BBC News (UK)', 'UK', 'centrist',
+      'BBC UK desk — the UK-region half of the BBC row.',
+      feedHint: 'https://feeds.bbci.co.uk/news/uk/rss.xml',
+      feedOnly: true, slug: 'bbc.com-uk'),
+  Candidate('bbc.com', 'BBC Business', 'GLOBAL', 'centrist',
+      'Business desk — fills the business coverage gap.',
+      feedHint: 'https://feeds.bbci.co.uk/news/business/rss.xml',
+      feedOnly: true, slug: 'bbc.com-business'),
+  Candidate('bbc.com', 'BBC Sport', 'GLOBAL', 'centrist',
+      'Sport desk — fills the sports coverage gap.',
+      feedHint: 'https://feeds.bbci.co.uk/sport/rss.xml',
+      feedOnly: true, slug: 'bbc.com-sport'),
+  Candidate('bbc.com', 'BBC Technology', 'GLOBAL', 'centrist',
+      'Technology desk — tech was the thinnest category in the Phase 15 pool.',
+      feedHint: 'https://feeds.bbci.co.uk/news/technology/rss.xml',
+      feedOnly: true, slug: 'bbc.com-technology'),
+  Candidate('npr.org', 'NPR', 'GLOBAL', 'centre-left',
+      'US public radio; strong national desk, serves the US region from the core.',
+      feedHint: 'https://feeds.npr.org/1001/rss.xml'),
+  Candidate('euronews.com', 'Euronews', 'EU', 'centrist',
+      'Pan-European English-language broadcaster — continental Europe coverage.',
+      feedHint: 'https://www.euronews.com/rss'),
+  Candidate('france24.com', 'France 24', 'EU', 'centrist',
+      'French public broadcaster, English service; Francophone Africa coverage. '
+      'Qualified in Phase 14 but not seeded — seeded now for the EU region.'),
+  // -- United Kingdom ------------------------------------------------------
+  Candidate('news.sky.com', 'Sky News', 'UK', 'centrist',
+      'UK commercial broadcaster with a large rolling-news desk.',
+      feedHint: 'https://feeds.skynews.com/feeds/rss/home.xml'),
+  Candidate('independent.co.uk', 'The Independent', 'UK', 'centre-left',
+      'UK national digital daily; balances Sky at the other end of the spread.',
+      feedHint: 'https://www.independent.co.uk/news/uk/rss'),
+  // -- United States -------------------------------------------------------
+  Candidate('axios.com', 'Axios', 'US', 'centrist',
+      'US digital outlet; short-form reporting with an explicit brevity format.',
+      feedHint: 'https://api.axios.com/feed/'),
+  Candidate('pbs.org', 'PBS NewsHour', 'US', 'centre-left',
+      'US public broadcaster; long-form national and political reporting.',
+      feedHint: 'https://www.pbs.org/newshour/feeds/rss/headlines'),
+  // -- Australia -----------------------------------------------------------
+  Candidate('abc.net.au', 'ABC News Australia', 'AU', 'centrist',
+      'Australian public broadcaster — the primary AU news desk.',
+      feedHint: 'https://www.abc.net.au/news/feed/45910/rss.xml'),
+  Candidate('theguardian.com', 'Guardian Australia', 'AU', 'centre-left',
+      'The Guardian\'s Australian edition — a separate desk with its own feed.',
+      feedHint: 'https://www.theguardian.com/australia-news/rss',
+      feedOnly: true, slug: 'theguardian.com-australia'),
+  // -- Category specialists (GLOBAL) ---------------------------------------
+  Candidate('techcrunch.com', 'TechCrunch', 'GLOBAL', 'centrist',
+      'Startup and technology reporting — priority tech pick (full-text free).',
+      feedHint: 'https://techcrunch.com/feed/'),
+  Candidate('wired.com', 'WIRED', 'GLOBAL', 'centre-left',
+      'Technology and society reporting — priority tech pick.',
+      feedHint: 'https://www.wired.com/feed/rss'),
+  Candidate('theverge.com', 'The Verge', 'GLOBAL', 'centre-left',
+      'Consumer technology reporting. Excerpt-only feed expected — added anyway.',
+      feedHint: 'https://www.theverge.com/rss/index.xml'),
+  Candidate('sciencedaily.com', 'Science Daily', 'GLOBAL', 'centrist',
+      'Research news aggregated from institutional releases.',
+      feedHint: 'https://www.sciencedaily.com/rss/all.xml'),
+  Candidate('sciencenews.org', 'Science News', 'GLOBAL', 'centrist',
+      'Society for Science; staffed science reporting desk.',
+      feedHint: 'https://www.sciencenews.org/feed'),
+  Candidate('cnbc.com', 'CNBC', 'GLOBAL', 'centre-right',
+      'Business and markets desk — fills the business coverage gap.',
+      feedHint: 'https://www.cnbc.com/id/100003114/device/rss/rss.html'),
+  Candidate('espn.com', 'ESPN', 'GLOBAL', 'centrist',
+      'Sports desk — fills the sports coverage gap.',
+      feedHint: 'https://www.espn.com/espn/rss/news'),
+];
+
+// ---------------------------------------------------------------------------
 // robots.txt
 // ---------------------------------------------------------------------------
 
@@ -972,6 +1068,7 @@ Future<void> main(List<String> args) async {
   final jsonOut = args.contains('--json');
   final noWrite = args.contains('--no-write');
   final all = args.contains('--all');
+  final phase16 = args.contains('--phase16');
   final feed = _flagValue(args, '--feed');
   final slug = _flagValue(args, '--slug');
   final domains = args.where((a) => !a.startsWith('--')).toList();
@@ -984,6 +1081,7 @@ Future<void> main(List<String> args) async {
 
   final targets = <Candidate>[
     if (all) ...kCandidates,
+    if (phase16) ...kPhase16Candidates,
     for (final d in domains)
       if (feed != null)
         Candidate(d, _flagValue(args, '--name') ?? d, 'GLOBAL',
@@ -997,8 +1095,8 @@ Future<void> main(List<String> args) async {
   ];
   if (targets.isEmpty) {
     stderr.writeln('usage: dart run tools/qualify_publisher.dart '
-        '[--all] [--json] [--no-write] [--feed=<url> [--slug=<name>]] '
-        '<domain> ...');
+        '[--all] [--phase16] [--json] [--no-write] '
+        '[--feed=<url> [--slug=<name>]] <domain> ...');
     exit(64);
   }
 

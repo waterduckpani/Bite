@@ -9,10 +9,12 @@ class BiteColors extends ThemeExtension<BiteColors> {
     required this.ink,
     required this.accent,
     required this.onAccent,
+    required this.body,
     required this.muted,
     required this.faint,
     required this.border,
     required this.card,
+    required this.glass,
     required this.danger,
   });
 
@@ -28,7 +30,13 @@ class BiteColors extends ThemeExtension<BiteColors> {
   /// Text/icons sitting on top of [accent].
   final Color onAccent;
 
-  /// Secondary text.
+  /// Reading copy that sits under a headline — the bite on a card, a timeline
+  /// entry's summary. Deliberately much closer to [ink] than [muted]: this is
+  /// the second most important thing on a card, and [muted] was too light to
+  /// hold that job.
+  final Color body;
+
+  /// Secondary text — labels, meta lines, attribution.
   final Color muted;
 
   /// Tertiary text, placeholders, disabled glyphs.
@@ -40,6 +48,11 @@ class BiteColors extends ThemeExtension<BiteColors> {
   /// Raised card surface.
   final Color card;
 
+  /// Fill for floating chrome (tab bar, headers, search field) drawn over a
+  /// blurred backdrop. Translucent on purpose — the alpha IS the effect, so
+  /// this must never be swapped for an opaque colour.
+  final Color glass;
+
   /// Destructive affordances (delete swipe, skip cue).
   final Color danger;
 
@@ -48,10 +61,12 @@ class BiteColors extends ThemeExtension<BiteColors> {
     ink: Color(0xFF1C1B19),
     accent: Color(0xFF86A797),
     onAccent: Color(0xFFFCFDFC),
+    body: Color(0xFF474139),
     muted: Color(0xFF8A857C),
     faint: Color(0xFFB3ADA2),
     border: Color(0xFFEAE7E0),
     card: Color(0xFFFFFFFF),
+    glass: Color(0xC4FFFFFF),
     danger: Color(0xFFC07B6A),
   );
 
@@ -60,10 +75,12 @@ class BiteColors extends ThemeExtension<BiteColors> {
     ink: Color(0xFFECE9E3),
     accent: Color(0xFF8FB3A2),
     onAccent: Color(0xFF12211B),
+    body: Color(0xFFCBC5BB),
     muted: Color(0xFF9A948A),
     faint: Color(0xFF6B665E),
     border: Color(0xFF2C2A27),
     card: Color(0xFF1F1E1C),
+    glass: Color(0xC42B2926),
     danger: Color(0xFFC98A79),
   );
 
@@ -76,10 +93,12 @@ class BiteColors extends ThemeExtension<BiteColors> {
     Color? ink,
     Color? accent,
     Color? onAccent,
+    Color? body,
     Color? muted,
     Color? faint,
     Color? border,
     Color? card,
+    Color? glass,
     Color? danger,
   }) {
     return BiteColors(
@@ -87,10 +106,12 @@ class BiteColors extends ThemeExtension<BiteColors> {
       ink: ink ?? this.ink,
       accent: accent ?? this.accent,
       onAccent: onAccent ?? this.onAccent,
+      body: body ?? this.body,
       muted: muted ?? this.muted,
       faint: faint ?? this.faint,
       border: border ?? this.border,
       card: card ?? this.card,
+      glass: glass ?? this.glass,
       danger: danger ?? this.danger,
     );
   }
@@ -103,10 +124,12 @@ class BiteColors extends ThemeExtension<BiteColors> {
       ink: Color.lerp(ink, other.ink, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       onAccent: Color.lerp(onAccent, other.onAccent, t)!,
+      body: Color.lerp(body, other.body, t)!,
       muted: Color.lerp(muted, other.muted, t)!,
       faint: Color.lerp(faint, other.faint, t)!,
       border: Color.lerp(border, other.border, t)!,
       card: Color.lerp(card, other.card, t)!,
+      glass: Color.lerp(glass, other.glass, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
     );
   }
@@ -150,6 +173,7 @@ TextStyle sans({
   double height = 1.4,
   Color? color,
   double? spacing,
+  double? wght,
 }) {
   return TextStyle(
     fontFamily: 'Inter',
@@ -158,7 +182,10 @@ TextStyle sans({
     color: color,
     letterSpacing: spacing,
     fontVariations: [
-      FontVariation('wght', weight.value.toDouble()),
+      // Inter is variable, so the axis takes any value — [wght] exists for the
+      // in-between weights [FontWeight] can't name (450 for reading copy that
+      // needs a touch more presence than regular without going semibold).
+      FontVariation('wght', wght ?? weight.value.toDouble()),
       FontVariation('opsz', size.clamp(14, 32)),
     ],
   );

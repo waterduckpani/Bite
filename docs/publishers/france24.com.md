@@ -1,9 +1,9 @@
 # France 24 — publisher qualification
 
 - **Domain:** `france24.com`
-- **Region:** GLOBAL
+- **Region:** EU
 - **Editorial lean (recorded for slate balance, not used at runtime):** centrist
-- **Checked:** 2026-07-25T07:11:48.574351Z
+- **Checked:** 2026-07-29T18:38:18.554675Z
 - **User-Agent used:** `BiteNewsBot/1.0 (+https://waterduckpani.github.io/Bite/bot)`
 - **Verdict:** **PASS** — ingestion mode `description-only`
 
@@ -24,9 +24,9 @@
 - Article paths allowed for `BiteNewsBot`: **yes**
 
 ```
-ALLOW  www.france24.com/en/the-problem-has-been-extremely-high-winds-wildfires-sweep-through-southwest-france
-ALLOW  www.france24.com/en/it-smells-of-burning-thousands-evacuated-as-wildfires-rage-around-madrid
-ALLOW  www.france24.com/en/middle-east/20260725-guterres-arrives-in-syria-for-first-un-secretary-general-visit-since-before-civil-war
+ALLOW  www.france24.com/en/video/20260729-wild-animals-first-victims-of-raging-wildfire-in-southwest-france
+ALLOW  www.france24.com/en/video/20260729-firefighter-films-wildfire-using-smart-glasses-in-france-s-gironde-1
+ALLOW  www.france24.com/en/video/20260729-trump-tries-to-take-action-in-the-middle-east-ahead-of-midterm-elections-1
 ```
 
 ## 3. Content depth
@@ -34,26 +34,26 @@ ALLOW  www.france24.com/en/middle-east/20260725-guterres-arrives-in-syria-for-fi
 | Signal | Count / 24 |
 | --- | --- |
 | `content:encoded` with real body | 0 |
-| usable `description` | 21 |
-| carries `<category>` | 12 |
+| usable `description` | 24 |
+| carries `<category>` | 4 |
 | parseable date | 24 |
 
 Body probe (single honest fetch, never retried):
 
-- URL: `https://www.france24.com/en/the-problem-has-been-extremely-high-winds-wildfires-sweep-through-southwest-france`
+- URL: `https://www.france24.com/en/video/20260729-wild-animals-first-victims-of-raging-wildfire-in-southwest-france`
 - HTTP 200
 - Wall detected: none
-- Readable paragraph characters: 640
+- Readable paragraph characters: 723
 
 **`full_text_allowed` → false**
 
 ## 4. Categories (opinion filtering)
 
-Exposed: `Americas`, `Europe`, `Europe Rendezvous`, `Eye on Africa`, `Middle East`, `Sport`
+Exposed: `Asia / Pacific`, `France`, `Middle East`
 
 ## 5. Volume
 
-~30 items/day (24 items spanning 19h 23m).
+~83 items/day (24 items spanning 6h 54m).
 
 ---
 

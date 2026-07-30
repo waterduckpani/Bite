@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/pressable.dart';
 import '../widgets/reader_cue.dart';
 import 'browser_screen.dart';
+import 'tracked_screen.dart' show TrackerStatsRow;
 
 /// A tracker's developing story, newest development first. This is a timeline,
 /// NOT a personalised feed — no taste ranking, straight reverse-chronological
@@ -68,16 +69,26 @@ class _TrackerDetailScreenState extends State<TrackerDetailScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Following since ${_date(tracker.createdAt)}'
-                            '${tracker.muted ? '  ·  Muted' : ''}',
+                            _originLine(tracker),
                             style: sans(size: 12, color: bite.muted),
                           ),
                         ],
                       ),
                     ),
                   ),
+                  // The same toggle the reader has: whatever turned following
+                  // on turns it off, wherever the reader happens to be.
+                  IconButton(
+                    tooltip: 'Stop following',
+                    icon: Icon(Icons.notifications_active, color: bite.accent),
+                    onPressed: () => _confirmUnfollow(context),
+                  ),
                 ],
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              child: TrackerStatsRow(tracker: tracker),
             ),
             // A story that has stopped developing. Offered as a suggestion,
             // never acted on automatically — a thread can go quiet for a week
@@ -145,6 +156,19 @@ class _TrackerDetailScreenState extends State<TrackerDetailScreen> {
     if (confirmed != true || !context.mounted) return;
     state.deleteTracker(tracker.id);
     Navigator.of(context).pop();
+  }
+
+  /// Where the story came from and when the reader picked it up — the two
+  /// facts a timeline can't show for itself.
+  String _originLine(StoryTracker t) {
+    final parts = <String>[
+      if (t.seedSource != null && t.seedSource!.isNotEmpty)
+        'From ${t.seedSource}',
+      'following since ${_date(t.createdAt)}',
+      if (t.muted) 'muted',
+    ];
+    final line = parts.join('  ·  ');
+    return line[0].toUpperCase() + line.substring(1);
   }
 
   String _date(DateTime dt) {
@@ -296,7 +320,8 @@ class _TimelineEntry extends StatelessWidget {
                 body,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: sans(size: 13.5, height: 1.5, color: bite.muted),
+                style:
+                    sans(size: 13.5, wght: 450, height: 1.5, color: bite.body),
               ),
             ],
             const SizedBox(height: 12),

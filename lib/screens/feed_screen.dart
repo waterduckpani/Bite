@@ -95,10 +95,47 @@ class _FeedScreenState extends State<FeedScreen> {
     BrowserScreen.open(context, article);
   }
 
+  Widget _swiper() => CardSwiper(
+        key: ValueKey(_epoch),
+        controller: _controller,
+        cardsCount: _deck.length,
+        numberOfCardsDisplayed: math.min(2, _deck.length),
+        backCardOffset: const Offset(0, -32),
+        scale: 0.94,
+        padding: EdgeInsets.zero,
+        isLoop: false,
+        allowedSwipeDirection: const AllowedSwipeDirection.only(
+          left: true,
+          right: true,
+          up: true,
+          down: true,
+        ),
+        onSwipe: _onSwipe,
+        onEnd: () => setState(() => _finished = true),
+        cardBuilder: (context, index, hPct, vPct) {
+          final article = _deck[index];
+          return GestureDetector(
+            onTap: () => _openReader(AppScope.of(context), article),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ArticleCard(article: article),
+                _SwipeCues(hPct: hPct, vPct: vPct),
+              ],
+            ),
+          );
+        },
+      );
+
+  /// Whether the next deck is REPLACING one (so it should animate in) rather
+  /// than being the first deck this screen has ever shown.
+  bool _entranceFromScratch = false;
+
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     if (_epoch != state.deckEpoch) {
+      final firstBuild = _epoch == -1;
       _epoch = state.deckEpoch;
       _deck = state.deck;
       _finished = _deck.isEmpty;
@@ -107,9 +144,14 @@ class _FeedScreenState extends State<FeedScreen> {
       // recordImpression queues a write.
       if (_deck.isNotEmpty) {
         final first = _deck.first;
-        WidgetsBinding.instance.addPostFrameCallback(
-            (_) => state.recordImpression(first));
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => state.recordImpression(first));
       }
+      // The entrance animation is NOT driven from here. See _DeckEntrance:
+      // its state is keyed to the epoch, so a rebuilt deck gets a fresh
+      // controller that starts at zero, and nothing has to mutate an
+      // animation during build.
+      _entranceFromScratch = !firstBuild;
     }
 
     final padding = MediaQuery.paddingOf(context);
@@ -134,38 +176,12 @@ class _FeedScreenState extends State<FeedScreen> {
                       )
                     : Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                        child: CardSwiper(
+                        child: _DeckEntrance(
+                          // A new epoch means a new State, and therefore a
+                          // fresh controller starting at zero.
                           key: ValueKey(_epoch),
-                          controller: _controller,
-                          cardsCount: _deck.length,
-                          numberOfCardsDisplayed: math.min(2, _deck.length),
-                          backCardOffset: const Offset(0, -32),
-                          scale: 0.94,
-                          padding: EdgeInsets.zero,
-                          isLoop: false,
-                          allowedSwipeDirection:
-                              const AllowedSwipeDirection.only(
-                            left: true,
-                            right: true,
-                            up: true,
-                            down: true,
-                          ),
-                          onSwipe: _onSwipe,
-                          onEnd: () => setState(() => _finished = true),
-                          cardBuilder: (context, index, hPct, vPct) {
-                            final article = _deck[index];
-                            return GestureDetector(
-                              onTap: () =>
-                                  _openReader(AppScope.of(context), article),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ArticleCard(article: article),
-                                  _SwipeCues(hPct: hPct, vPct: vPct),
-                                ],
-                              ),
-                            );
-                          },
+                          animate: _entranceFromScratch,
+                          child: _swiper(),
                         ),
                       ),
           ),
@@ -231,6 +247,105 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 }
 
+/// Fades and settles a REBUILT deck in rather than letting it pop — a region
+/// change (Phase 16, Part E), a feed reset, or fresh content arriving.
+///
+/// This is a separate widget KEYED TO THE DECK EPOCH, which is the whole point.
+/// Driving the entrance from the parent's own controller meant the parent had
+/// to reset that controller when the epoch changed, and the only place it knew
+/// the epoch had changed was inside `build` — so it mutated an animation that
+/// the FadeTransition below was already listening to, and Flutter threw
+/// "setState() or markNeedsBuild() called during build" on every rebuilt deck.
+/// Scheduling the reset post-frame would have fixed the exception but left the
+/// new deck painting fully opaque for one frame before snapping to zero.
+///
+/// A fresh State per epoch has neither problem: the controller is created at
+/// zero and started in initState, which is a legal place to begin an animation
+/// because this widget's own listeners are not attached until its first build.
+///
+/// Under reduced motion the child is returned UNWRAPPED — no transition widgets
+/// in the tree at all, not merely a zero-duration animation. That is the honest
+/// reading of the preference, and it keeps the tree identical to the
+/// pre-Phase-16 one when animations are off, which is what the gesture tests
+/// exercise.
+class _DeckEntrance extends StatefulWidget {
+  const _DeckEntrance({super.key, required this.animate, required this.child});
+
+  /// False for the very first deck this screen shows — there is nothing it is
+  /// replacing, so it simply appears.
+  final bool animate;
+  final Widget child;
+
+  @override
+  State<_DeckEntrance> createState() => _DeckEntranceState();
+}
+
+class _DeckEntranceState extends State<_DeckEntrance>
+    with SingleTickerProviderStateMixin {
+  /// Created EAGERLY in initState, not as a lazy `late final`. Under reduced
+  /// motion nothing ever reads it, so a lazy field would still be uninitialised
+  /// when dispose() touched it — and the initialiser needs a Ticker, which
+  /// cannot be created on a deactivated element. That throws "Looking up a
+  /// deactivated widget's ancestor is unsafe" from inside dispose, which is a
+  /// thoroughly misleading place to read it from.
+  ///
+  /// Starts settled, so a deck that turns out not to animate is never
+  /// invisible, not even for a frame.
+  late final AnimationController _in;
+  late final Animation<double> _curve;
+
+  /// Resolved once, in didChangeDependencies. Read by build, never written
+  /// there.
+  bool _resolved = false;
+  bool _animating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _in = AnimationController(
+      vsync: this,
+      duration: BiteMotion.gentle,
+      value: 1,
+    );
+    _curve = CurvedAnimation(parent: _in, curve: BiteMotion.easeOut);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This runs BEFORE the first build, which is what makes it the right place:
+    // reducedMotion needs MediaQuery (so initState is too early), and nothing
+    // is listening to _curve yet (so rewinding and starting the controller
+    // cannot mark anything dirty). Guarded to once — a theme change or metrics
+    // change re-runs this, and it must not replay the entrance.
+    if (_resolved) return;
+    _resolved = true;
+    _animating = widget.animate && !reducedMotion(context);
+    if (_animating) {
+      _in.value = 0;
+      _in.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _in.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_animating) return widget.child;
+    return FadeTransition(
+      opacity: _curve,
+      child: ScaleTransition(
+        scale: _curve.drive(Tween(begin: 0.97, end: 1.0)),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 /// Fixed height of the floating feed header, so the deck can be inset to sit
 /// exactly below it.
 const double _kFeedHeaderHeight = 52;
@@ -245,9 +360,6 @@ class _GlassHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final bite = context.bite;
     return GlassSurface(
-      borderRadius: 24,
-      blur: 10,
-      thickness: 16,
       child: SizedBox(
         height: _kFeedHeaderHeight,
         child: Padding(
@@ -307,8 +419,8 @@ class _SwipeCues extends StatelessWidget {
             if (left > 0)
               _cueScrim(context, bite.danger, left,
                   alignment: Alignment.topRight,
-                  child: _cueBadge('NOT INTERESTED', Icons.close_rounded,
-                      bite.danger, left,
+                  child: _cueBadge(
+                      'NOT INTERESTED', Icons.close_rounded, bite.danger, left,
                       angle: 0.12)),
             if (right > 0)
               _cueScrim(context, bite.accent, right,
@@ -358,11 +470,9 @@ class _SwipeCues extends StatelessWidget {
       // label ride crisply on top of the frosted surface.
       child: GlassSurface(
         borderRadius: 12,
-        blur: 6,
-        thickness: 12,
-        tint: color.withValues(alpha: 0.16),
-        solidColor: Colors.white,
-        solidBorder: false,
+        blur: 8,
+        tint: color.withValues(alpha: 0.22),
+        bordered: false,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(

@@ -79,8 +79,15 @@ const FALLBACK_MODELS = [
 /// public.ai_usage_daily before any tokens are spent, so two overlapping runs
 /// cannot both spend the last of the day's budget.
 ///
-///   Cost per bite ~ 1500 in + 200 out ~ $0.0007
-///   200/day  ->  ~$0.14/day  ->  ~$4/month
+/// MEASURED, not projected (see ai_spend_report, migration 0023). A full
+/// 200-summary day spends ~230k input / ~17k output tokens:
+///
+///   Cost per bite ~ 1150 in + 84 out ~ $0.00015
+///   200/day  ->  ~$0.030/day  ->  ~$0.90/month
+///
+/// The ~$0.0007/bite figure carried in comments from 0013 through Phase 15 was
+/// about 5x too high. It was never checked because nothing read the ledger
+/// back; the run log below now does, every run.
 const DAILY_SUMMARY_CAP = 200;
 
 const BATCH_SIZE = 25;
@@ -167,7 +174,20 @@ async function callModel(
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${openrouterKey}`,
-        "HTTP-Referer": "https://bite.app",
+        // OpenRouter attributes spend to an app by these two headers. They
+        // are set on EVERY request this codebase makes — `send` is the only
+        // place a model is ever called, and both the reasoning attempt and the
+        // no-reasoning retry go through it — so no call originating here can
+        // appear unlabelled on the dashboard.
+        //
+        // The Referer points at the real, resolvable bot page rather than the
+        // placeholder `https://bite.app`, which is not a site we control and so
+        // could not be attributed to anything. Any unlabelled OpenRouter
+        // activity remaining after this deploy did NOT come from these Edge
+        // Functions — the only other network model call in the repo is the
+        // embedder, and that runs on the Edge runtime's built-in gte-small with
+        // no OpenRouter involvement at all.
+        "HTTP-Referer": "https://waterduckpani.github.io/Bite/",
         "X-Title": "Bite",
       },
       body: JSON.stringify(payload),
@@ -475,11 +495,45 @@ Deno.serve(async (req) => {
   if (unusedSlots > 0) {
     await supabase.rpc("release_summary_slots", { p_n: unusedSlots });
   }
+  // Day-to-date spend, read back AFTER recording this run's tokens.
+  //
+  // record_summary_tokens has always accumulated into ai_usage_daily, but
+  // nothing ever read it back, so the monthly cost figure in every migration
+  // header was a projection nobody had checked. Phase 16 raises ingestion from
+  // ~100 to ~192 articles/day, which is exactly when an unverified cost model
+  // stops being harmless — so the running total is logged on every run and
+  // ai_spend_report() (migration 0023) reports the history.
+  //
+  // Prices match ai_spend_report's defaults; they are parameters of the cost
+  // model, not facts, and both places name them openly.
+  const IN_PER_MTOK = 0.10;
+  const OUT_PER_MTOK = 0.40;
+  let spendLine = "";
   if (usage.input > 0 || usage.output > 0) {
     await supabase.rpc("record_summary_tokens", {
       p_input: usage.input,
       p_output: usage.output,
     });
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: dayRow } = await supabase
+      .from("ai_usage_daily")
+      .select("summaries_done, input_tokens, output_tokens")
+      .eq("day", today)
+      .maybeSingle();
+    if (dayRow) {
+      const row = dayRow as {
+        summaries_done: number;
+        input_tokens: number;
+        output_tokens: number;
+      };
+      const usd = (row.input_tokens / 1e6) * IN_PER_MTOK +
+        (row.output_tokens / 1e6) * OUT_PER_MTOK;
+      spendLine = `[summarize] spend day=${today}` +
+        ` summaries=${row.summaries_done}/${DAILY_SUMMARY_CAP}` +
+        ` tokens_in=${row.input_tokens} tokens_out=${row.output_tokens}` +
+        ` usd_today=${usd.toFixed(4)} usd_month_projected=${(usd * 30).toFixed(2)}`;
+      console.log(spendLine);
+    }
   }
 
   const report = {
@@ -493,6 +547,7 @@ Deno.serve(async (req) => {
     tokens_in: usage.input,
     tokens_out: usage.output,
     daily_cap: DAILY_SUMMARY_CAP,
+    spend: spendLine || null,
   };
   console.log(`summarize run ${JSON.stringify(report)}`);
   return Response.json(report);

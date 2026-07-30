@@ -61,14 +61,37 @@ type Db = ReturnType<typeof createDb>;
 
 // -- Config (one place) -----------------------------------------------------
 
-/// Global ceiling per run, across ALL enabled publishers. 25 x 4 runs/day =
-/// 100/day, against a DAILY_SUMMARY_CAP of 200 — so since the cron went
-/// 6-hourly (migration 0021) INGESTION is the binding constraint, not the
-/// summariser's budget, and the cap is a safety ceiling that is not reached.
-/// This is the lever for deck supply: raising DAILY_SUMMARY_CAP alone buys
-/// nothing. Above roughly 30, per-publisher max_per_run (default 3, Guardian
-/// 6) binds first and has to move with it.
-const MAX_ARTICLES_PER_RUN_TOTAL = 25;
+/// Global ceiling per run, across ALL enabled publishers.
+///
+/// Phase 16: 25 -> 48. With the 6-hourly cron (migration 0021) that is
+/// 48 x 4 = ~192 articles/day, which sits just under the unchanged
+/// DAILY_SUMMARY_CAP of 200 and under get_personalized_feed's p_limit of 200.
+/// Deliberately under both: the cap stays a safety ceiling rather than
+/// something the pipeline runs into every day.
+///
+/// The Phase 15 note that per-publisher max_per_run would bind above ~30 no
+/// longer applies — the registry went from 9 publishers to 26 in migration
+/// 0023, and their max_per_run values now sum to ~105. The global cap here is
+/// comfortably the binding constraint again, which is what makes the
+/// round-robin below the thing that actually decides the mix.
+const MAX_ARTICLES_PER_RUN_TOTAL = 48;
+
+/// Soft ceiling on any ONE non-GLOBAL region's share of a run.
+///
+/// Round-robin already spreads a run across publishers, so in the ordinary
+/// case regional shares track source counts and this never binds. It exists
+/// for the degenerate case: high-volume regional dailies (The Hindu at ~271
+/// items/day, The Independent at ~107) always have candidates, while quiet
+/// specialists (Science News at ~2/day) frequently have none — and on such a
+/// run the busy region quietly takes a share far above its weight in the
+/// slate. That is supply skew masquerading as editorial balance.
+///
+/// GLOBAL is EXEMPT, and that is not an oversight. It is half the slate by
+/// design (13 of 26 sources) and it is the balanced core every reader sees at
+/// equal weight; capping it at 35% would starve the pool to protect it from
+/// itself. User preference is expressed by REGION_BOOST at ranking time; this
+/// only keeps the BASE pool from being decided by who publishes fastest.
+const MAX_REGION_SHARE = 0.35;
 
 /// How far back a story may be published and still be ingested. The feed pool
 /// in get_personalized_feed is 48h, so anything older is dead on arrival.
@@ -267,6 +290,10 @@ interface Publisher {
   robots_rules: { allow: boolean; pattern: string }[];
   max_per_run: number;
   body_wall_streak: number;
+  /// Phase 16 region tag: GLOBAL | US | UK | EU | IN | AU. Read here ONLY for
+  /// the per-region supply ceiling below. It has no effect on what is fetched
+  /// or on which publishers run — every enabled publisher runs every cycle.
+  region: string;
 }
 
 // -- Dedup ------------------------------------------------------------------
@@ -650,7 +677,7 @@ Deno.serve(async (req) => {
     .select(
       "id, name, canonical_domain, rss_url, rss_urls, full_text_allowed," +
         " robots_checked_at, robots_crawl_delay, robots_rules, max_per_run," +
-        " body_wall_streak",
+        " body_wall_streak, region",
     )
     .eq("enabled", true)
     .order("id");
@@ -734,8 +761,21 @@ Deno.serve(async (req) => {
   //    cannot take the whole run. (The same lesson as the NewsData allowlist
   //    grouping in ingest-news.) Each publisher is additionally capped at its
   //    own max_per_run.
+  //    Phase 16 adds a second, softer limit on top: no single NON-GLOBAL region
+  //    may take more than MAX_REGION_SHARE of the run. Publisher fair-share
+  //    alone does not give that, because a region's share also depends on how
+  //    many of its publishers happen to have candidates — a run where the quiet
+  //    specialists came up empty hands the busy regional dailies a share of the
+  //    pool that nothing editorial justifies.
   const selected: { row: ArticleRow; run: PublisherRun }[] = [];
   const takenPerPublisher = new Map<string, number>();
+  const takenPerRegion = new Map<string, number>();
+  const regionCap = Math.max(1, Math.floor(
+    MAX_ARTICLES_PER_RUN_TOTAL * MAX_REGION_SHARE,
+  ));
+  // Regions that actually hit their ceiling, so the log can say so rather than
+  // leaving a silent truncation to be discovered from a lopsided deck.
+  const regionCapped = new Set<string>();
   for (
     let round = 0;
     selected.length < MAX_ARTICLES_PER_RUN_TOTAL && round < 50;
@@ -747,6 +787,19 @@ Deno.serve(async (req) => {
       const taken = takenPerPublisher.get(run.publisher.id) ?? 0;
       if (taken >= run.publisher.max_per_run) continue;
       if (round >= run.candidates.length) continue;
+      // GLOBAL is exempt: it is the balanced core, half the slate, and every
+      // reader sees it at equal weight whatever region they picked.
+      const region = run.publisher.region ?? "GLOBAL";
+      if (region !== "GLOBAL") {
+        const regionTaken = takenPerRegion.get(region) ?? 0;
+        if (regionTaken >= regionCap) {
+          regionCapped.add(region);
+          continue;
+        }
+        takenPerRegion.set(region, regionTaken + 1);
+      } else {
+        takenPerRegion.set(region, (takenPerRegion.get(region) ?? 0) + 1);
+      }
       selected.push({ row: run.candidates[round], run });
       takenPerPublisher.set(run.publisher.id, taken + 1);
       progressed = true;
@@ -760,7 +813,15 @@ Deno.serve(async (req) => {
     log.push(
       `[ingest-rss] fair-share cap: kept ${selected.length} of ${totalCandidates}` +
         ` candidates (MAX_ARTICLES_PER_RUN_TOTAL=${MAX_ARTICLES_PER_RUN_TOTAL});` +
-        ` per-publisher=${JSON.stringify(Object.fromEntries(takenPerPublisher))}`,
+        ` per-publisher=${JSON.stringify(Object.fromEntries(takenPerPublisher))}` +
+        ` per-region=${JSON.stringify(Object.fromEntries(takenPerRegion))}`,
+    );
+  }
+  if (regionCapped.size > 0) {
+    log.push(
+      `[ingest-rss] region ceiling bound for ${[...regionCapped].join(", ")}` +
+        ` at ${regionCap}/run (MAX_REGION_SHARE=${MAX_REGION_SHARE});` +
+        ` those regions had more candidates than they were allowed to take`,
     );
   }
 
@@ -870,6 +931,7 @@ Deno.serve(async (req) => {
     publishers: publishers.length,
     per_publisher: Object.fromEntries(
       runs.map((r) => [r.publisher.id, {
+        region: r.publisher.region,
         fetched: r.fetched,
         candidates: r.candidates.length,
         taken: takenPerPublisher.get(r.publisher.id) ?? 0,
@@ -880,6 +942,9 @@ Deno.serve(async (req) => {
       }]),
     ),
     selected: selected.length,
+    per_region: Object.fromEntries(takenPerRegion),
+    region_cap: regionCap,
+    regions_capped: [...regionCapped],
     upserted,
     bodies_stored: bodies.length,
     body_skips: bodySkips,

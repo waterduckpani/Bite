@@ -121,7 +121,7 @@ personalized RPC:
    flooded timeline.
 5. **`get_personalized_feed`** is a single Postgres RPC that assembles the deck:
    taste similarity + category affinity + recency, minus the topic penalty,
-   plus a mild country nudge, with the exploration slice interleaved via
+   plus a mild region boost, with the exploration slice interleaved via
    collision-free slot math. It also **gates on the bite** — only summarised
    articles are candidates, so a card without one cannot render. If that ever
    visibly thins the deck, it is a summarisation-throughput signal, not a
@@ -237,7 +237,7 @@ only, under a published bot policy. No licensed content API.
 lib/
 ├─ config/        AppConfig + feed tuning constants
 ├─ data/          bundled mock articles, palettes, source metadata
-├─ models/        Article, StoryTracker, Country
+├─ models/        Article, StoryTracker, Region
 ├─ screens/       feed · browser · saved · tracked · discover ·
 │                 onboarding · profile · tracker detail/management
 ├─ services/      UserDataRepository (persistence + auth)
@@ -305,6 +305,35 @@ adding a row and turning it on are two different decisions):
 update public.publishers set enabled = true
  where id in ('thehindu', 'deccanherald', 'scroll', 'aljazeera');
 ```
+
+**Regions.** Every registry row carries a `region` tag —
+`GLOBAL | US | UK | EU | IN | AU`. It is read for exactly one purpose: a mild
+additive ranking boost (`REGION_BOOST = 0.12`, against a similarity weight of
+`0.55`) when a reader has selected that region in onboarding or profile.
+
+It is **never a filter.** `get_personalized_feed`'s candidate `WHERE` clause
+contains no region predicate at all, so every enabled publisher is in every
+reader's pool on every query. `Global` applies no boost, which makes a Global
+reader's ranking arithmetically identical to the pre-region one. The boost is
+additive only: in-region stories are lifted, out-of-region stories are never
+penalised. A `GLOBAL` tag therefore means "not boosted by any selection", not
+"hidden from regional readers".
+
+```sql
+-- who is live, and how the slate is spread
+select region, count(*) from publishers where enabled group by region;
+```
+
+Changing region re-ranks the deck **in place** — the client awaits the profile
+write before re-querying (the boost is applied server-side, so re-querying
+first would rank under the old region), preserves the taste vector, saves and
+swipe state, and fades the new deck in.
+
+A publisher that runs a genuinely separate regional desk off one domain gets a
+second row: `UNIQUE (canonical_domain, region)` permits it, which is how
+Guardian Australia carries `AU` while `theguardian.com` carries `GLOBAL`.
+Section feeds still belong in `rss_urls` on a single row — that is a different
+axis and unchanged.
 
 **The click-through report.** This is the number that goes into a publisher
 email — impressions, link-outs, CTR %, and how many distinct readers were sent

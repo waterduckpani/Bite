@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/article.dart';
-import '../models/country.dart';
+import '../models/region.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/category_chip.dart';
@@ -17,7 +17,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final Set<Category> _picks = {};
-  Country _country = Country.global;
+  Region _region = Region.global;
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +98,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           style: caps(size: 11, color: bite.muted)),
                       const SizedBox(height: 6),
                       Text(
-                        'We’ll mix in a little more coverage from your part '
-                        'of the world. No location access — just a preference.',
+                        'We’ll lift coverage from your part of the world a '
+                        'little higher. You still see everything — it’s a '
+                        'nudge, not a filter, and no location access is used.',
                         style: sans(size: 13, color: bite.muted, height: 1.4),
                       ),
                       const SizedBox(height: 14),
@@ -107,11 +108,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         spacing: 10,
                         runSpacing: 10,
                         children: [
-                          for (final c in Country.values)
+                          for (final r in Region.values)
                             TopicPill(
-                              label: c.label,
-                              selected: _country == c,
-                              onTap: () => setState(() => _country = c),
+                              label: r.label,
+                              selected: _region == r,
+                              onTap: () => setState(() => _region = r),
                             ),
                         ],
                       ),
@@ -126,7 +127,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ? null
                       : () {
                           HapticFeedback.lightImpact();
-                          state.completeOnboarding(_picks, country: _country);
+                          state.completeOnboarding(_picks, region: _region);
                         },
                   child: Text(
                     _picks.isEmpty

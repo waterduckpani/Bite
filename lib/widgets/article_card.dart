@@ -248,8 +248,12 @@ class _ArticleCardBody extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: sans(
                 size: _kBodySize,
+                // The bite is the card's substance, not a caption — it carries
+                // near-ink weight and colour so it competes with the hook
+                // instead of receding behind it.
+                wght: 450,
                 height: _kBodyHeightFactor,
-                color: bite.muted,
+                color: bite.body,
               ),
             ),
           ],

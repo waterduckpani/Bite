@@ -153,8 +153,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: GlassSurface(
             borderRadius: 30,
-            blur: 12,
-            thickness: 18,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               child: Row(

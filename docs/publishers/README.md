@@ -1,4 +1,4 @@
-# Publisher qualification — Phase 14
+# Publisher qualification
 
 Every publisher in the `publishers` registry was checked with
 `tools/qualify_publisher.dart` before being added, and its report is committed
@@ -6,7 +6,8 @@ in this directory. **No publisher is added on assumption.** Re-run the script
 and update the report before changing any registry row.
 
 ```bash
-dart run tools/qualify_publisher.dart --all          # the full candidate slate
+dart run tools/qualify_publisher.dart --all          # the Phase 14 slate
+dart run tools/qualify_publisher.dart --phase16      # the Phase 16 expansion
 dart run tools/qualify_publisher.dart thehindu.com   # one domain
 
 # One exact feed, for a publisher that runs several (discovery only ever finds
@@ -16,8 +17,157 @@ dart run tools/qualify_publisher.dart theguardian.com \
     --slug=theguardian.com-world --name="The Guardian (world)"
 ```
 
-Checked on **2026-07-25** with the honest User-Agent
+Checked on **2026-07-25** (Phase 14), **2026-07-28** (Guardian, Phase 15.1) and
+**2026-07-30** (Phase 16) with the honest User-Agent
 `BiteNewsBot/1.0 (+https://waterduckpani.github.io/Bite/bot)`.
+
+## Phase 16 — regional expansion (migration 0023)
+
+The slate goes from 9 live publishers to **26**, and gains a six-value region
+taxonomy: `GLOBAL | US | UK | EU | IN | AU`.
+
+**What a region tag is.** A fact about the publisher, stored on the registry
+row, read for exactly one purpose: a mild additive ranking boost
+(`REGION_BOOST = 0.12`, against `w_sim = 0.55`) when a reader has selected that
+region. It is **never a filter** — every enabled publisher is a candidate in
+every reader's pool on every query, and `Global` applies no boost at all, so a
+Global reader's ranking is arithmetically identical to Phase 15.2's.
+
+This **replaces** the Phase 12 country nudge entirely. That nudge scored an
+article by looking for country words in its URL slug and category strings,
+which measured slug style rather than relevance — `/join-us/` scored the nudge
+for a US reader, and migration 0019's own header says so. `w_country`,
+`v_country_words` and `profiles.country` are all deleted in 0023, not zeroed:
+"this is an Indian outlet" is a fact, "this URL contains india" was an accident.
+
+### Added in Phase 16 — 17 rows, all qualified
+
+| Publisher | Region | Feed | Mode | `full_text_allowed` | ~items/day | `max_per_run` |
+| --- | --- | --- | --- | --- | --- | --- |
+| [BBC News](bbc.com-world.md) | GLOBAL | 4 section feeds | description-only | false | 17 (world) | 6 |
+| [NPR](npr.org.md) | GLOBAL | `feeds.npr.org/1001` | body-fetch-allowed | **true** | 30 | 4 |
+| [Euronews](euronews.com.md) | EU | `/rss` | body-fetch-allowed | **true** | 113 | 3 |
+| [France 24](france24.com.md) | EU | `/en/rss` | description-only | false | 83 | 3 |
+| [Sky News](news.sky.com.md) | UK | `feeds.skynews.com` | description-only | false | 1* | 4 |
+| [The Independent](independent.co.uk.md) | UK | `/news/uk/rss` | description-only | false (paywall) | 107 | 3 |
+| [PBS NewsHour](pbs.org.md) | US | `/newshour/feeds/rss/headlines` | body-fetch-allowed | **true** | 24 | 4 |
+| [The Hill](thehill.com.md) | US | `/feed` | description-only | false (403) | 99 | 3 |
+| [ABC News Australia](abc.net.au.md) | AU | `/news/feed/45910` | body-fetch-allowed | **true** | 30 | 4 |
+| [Guardian Australia](theguardian.com-australia.md) | AU | `/australia-news/rss` | body-fetch-allowed | **true** | 1* | 3 |
+| [TechCrunch](techcrunch.com.md) | GLOBAL | `/feed/` | body-fetch-allowed | **true** | 21 | 4 |
+| [WIRED](wired.com.md) | GLOBAL | `/feed/rss` | description-only | false (paywall) | 32 | 4 |
+| [The Verge](theverge.com.md) | GLOBAL | `/rss/index.xml` | **RSS full content** | false (not needed) | 38 | 4 |
+| [Science Daily](sciencedaily.com.md) | GLOBAL | `/rss/all.xml` | body-fetch-allowed | **true** | 8 | 4 |
+| [Science News](sciencenews.org.md) | GLOBAL | `/feed` | description-only | false (paywall) | 2 | 3 |
+| [CNBC](cnbc.com.md) | GLOBAL | `/id/100003114/…` | description-only | false (paywall) | 43 | 4 |
+| [ESPN](espn.com.md) | GLOBAL | `/espn/rss/news` | description-only | false (paywall) | 23 | 4 |
+
+\* Feeds carrying a long evergreen tail produce a meaningless span-based
+items/day estimate — the same caveat recorded for the Guardian sections below.
+What bounds a run is `MAX_ITEM_AGE_HOURS = 48` and `max_per_run`, not feed
+length.
+
+Existing rows were retagged: **Deutsche Welle GLOBAL → EU**. The Christian
+Science Monitor and Reason stay GLOBAL despite being US outlets — CSM's brief
+is explicitly international and Reason's is national politics, and neither is
+what a reader picking "United States" is asking for.
+
+Final distribution: **13 GLOBAL, 4 IN, 3 EU, 2 UK, 2 US, 2 AU.**
+
+### Where the probe disagreed with the plan — the probe won
+
+The Phase 16 plan predicted modes for several sources. Four of those
+predictions were wrong, and the seed follows the measurement:
+
+| Source | Plan said | Probe found | Seeded as |
+| --- | --- | --- | --- |
+| WIRED | "full-text free, priority" | **paywall** on honest fetch | description-only |
+| The Verge | "excerpt-only, add anyway" | full `content:encoded` on 10/10 items | **RSS full content** |
+| CNBC, ESPN, Science News, The Independent | (unstated) | **paywall**, aborted | description-only |
+| Sky News | (unstated) | HTTP **403**, robots.txt also 403 | description-only |
+
+**The Verge is the interesting case.** Because its feed carries real bodies,
+`ingest-rss` reads them straight from the feed and never requests an article
+page at all — `hasUsableFullContent` is checked *before* `full_text_allowed`.
+It gets full-text bites at zero request cost to the publisher, which is the
+politest outcome available. Its `full_text_allowed` stays `false` (the article
+page is walled), and that costs nothing because no page fetch is needed.
+
+No walled source is retried with different headers. There is no code path in
+the repository that could, and none was added.
+
+### EU is tagged, not left inert
+
+The Phase 16 plan put DW, France 24 and Euronews in the global core *and*
+listed Europe as a selectable region — which would have made "Europe" a
+preference that boosted precisely nothing. That is the same silent no-signal
+failure migration 0019 documents at length, and shipping a knowing second
+instance of it would be worse than the first. All three are tagged `EU`.
+
+This costs nothing, because a `GLOBAL` tag confers no visibility a regional tag
+lacks — both appear in every reader's pool. `GLOBAL` only means "not boosted".
+
+### Rejected in Phase 16
+
+| Publisher | Why |
+| --- | --- |
+| [Axios](axios.com.md) | `api.axios.com/feed/` is **disallowed by robots.txt**, and all 28 conventional paths on `axios.com` return 404 (one returns 200 with no parseable items). No usable feed. |
+| [USA Today](usatoday.com.md) | No parseable feed at any probed path. Qualified as an Axios replacement; failed. |
+| [CBS News](cbsnews.com.md) | No parseable feed at any probed path. Qualified as an Axios replacement; failed. |
+
+**US is thinner than planned, and that is a live gap.** Axios was the plan's
+primary US pick and it failed on technical grounds. Of the three replacements
+tried, only The Hill qualified. US therefore runs on NPR (core, GLOBAL) + PBS
+NewsHour + The Hill, with only the latter two carrying the `US` tag. Worth
+revisiting rather than leaving: candidates not yet tried include `apnews.com`,
+`politico.com` and `thehill.com`'s sibling verticals.
+
+### Qualified but not seeded
+
+- **[BBC News (UK)](bbc.com-uk.md)** — the BBC's UK section feed passes. It is
+  *not* seeded, because the Phase 16 plan places BBC in the global core and
+  covers UK with Sky News and The Independent. It is the ready lever if UK
+  needs depth: add a second `bbc.com` row tagged `UK` (which
+  `UNIQUE (canonical_domain, region)` now permits, exactly as Guardian
+  Australia does).
+- **The Conversation** — unchanged from Phase 14; see below.
+
+### Regional editions of one domain
+
+`publishers.canonical_domain` dropped its `UNIQUE` constraint in favour of
+`UNIQUE (canonical_domain, region)`. Some outlets run genuinely separate
+regional desks off one domain — Guardian Australia is a different newsroom with
+its own feed and has to carry `AU` while `theguardian.com` carries `GLOBAL`.
+
+This does **not** reopen the thing the original constraint prevented: section
+feeds still go in `rss_urls` on one row (see 0018 Part A), and one row per
+`(domain, region)` is a different axis. The cost is one extra robots.txt fetch
+per `ROBOTS_CACHE_HOURS` per edition, and CTR reported per edition — the second
+arguably an improvement.
+
+### Supply caps
+
+`MAX_ARTICLES_PER_RUN_TOTAL` goes **25 → 48**. At 4 runs/day that is ~192
+articles/day, just under the unchanged `DAILY_SUMMARY_CAP` of 200 and under
+`get_personalized_feed`'s `p_limit` of 200 — deliberately under both, so the
+cap stays a safety ceiling rather than something the pipeline hits daily.
+
+`MAX_REGION_SHARE = 0.35` caps any one **non-GLOBAL** region's share of a run
+(16 of 48). Round-robin already spreads a run across publishers, so this
+normally never binds; it exists for the run where the quiet specialists came up
+empty and the high-volume regional dailies would otherwise take a share nothing
+editorial justifies. GLOBAL is exempt — it is half the slate and capping it
+would starve the pool. When the ceiling does bind, `ingest-rss` logs which
+region and by how much; it is never a silent truncation.
+
+Cost is now **measured, not projected**: `summarize-articles` logs day-to-date
+token spend on every run, and `ai_spend_report()` (migration 0023) reports the
+history. `publisher_input_modes()` reports the description-only vs full-text
+split per publisher.
+
+---
+
+## Phase 14 — the original slate
 
 ## Governing principle
 
