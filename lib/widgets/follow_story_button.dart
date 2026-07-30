@@ -26,46 +26,26 @@ class FollowStoryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final bite = context.bite;
     final following = state.isFollowing(article.id);
     final atCap = state.trackers.length >= AppState.maxTrackers;
 
-    return Material(
-      color: following ? bite.accent : Colors.transparent,
-      shape: following
-          ? const CircleBorder()
-          : CircleBorder(side: BorderSide(color: bite.border, width: 0.75)),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () {
-          if (following) {
-            HapticFeedback.selectionClick();
-            _confirmUnfollow(context, state);
-            return;
-          }
-          if (atCap) {
-            _snack(context,
-                'You can follow up to ${AppState.maxTrackers} stories.');
-            return;
-          }
-          HapticFeedback.mediumImpact();
-          state.followStory(article);
-          _snack(context, 'Following — new developments land in Tracked');
-        },
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Semantics(
-            button: true,
-            label: following ? 'Stop following this story' : 'Follow this story',
-            child: Icon(
-              following ? Icons.notifications_active : Icons.notifications_none,
-              size: 20,
-              color: following ? bite.onAccent : bite.ink,
-            ),
-          ),
-        ),
-      ),
+    return FollowGlyph(
+      following: following,
+      onTap: () {
+        if (following) {
+          HapticFeedback.selectionClick();
+          _confirmUnfollow(context, state);
+          return;
+        }
+        if (atCap) {
+          _snack(
+              context, 'You can follow up to ${AppState.maxTrackers} stories.');
+          return;
+        }
+        HapticFeedback.mediumImpact();
+        state.followStory(article);
+        _snack(context, 'Following. New developments land in Tracked.');
+      },
     );
   }
 
@@ -115,5 +95,47 @@ class FollowStoryButton extends StatelessWidget {
         backgroundColor: bite.ink,
         duration: const Duration(seconds: 2),
       ));
+  }
+}
+
+/// The follow control's LOOK, with its state and its tap handed in.
+///
+/// Split out of [FollowStoryButton] so the Phase 17 walkthrough can teach the
+/// control without wiring it to a real tracker. The practice bell is not a
+/// drawing of this button, it IS this button: same circle, same fill, same
+/// glyph swap, same 44pt target. If the real one is restyled the lesson
+/// restyles with it, which is the only way a walkthrough stays true.
+class FollowGlyph extends StatelessWidget {
+  const FollowGlyph({super.key, required this.following, required this.onTap});
+
+  final bool following;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    return Material(
+      color: following ? bite.accent : Colors.transparent,
+      shape: following
+          ? const CircleBorder()
+          : CircleBorder(side: BorderSide(color: bite.border, width: 0.75)),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Semantics(
+            button: true,
+            label: following ? 'Stop following this story' : 'Follow this story',
+            child: Icon(
+              following ? Icons.notifications_active : Icons.notifications_none,
+              size: 20,
+              color: following ? bite.onAccent : bite.ink,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

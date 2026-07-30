@@ -3,10 +3,16 @@
 /// get_personalized_feed migrations — the client never ranks. What lives here
 /// is only what the client itself needs to gate UI.
 abstract final class FeedConfig {
-  /// Bump to re-show the gesture tutorial after a gesture-mapping change.
-  /// Persisted per user as `profiles.gesture_tutorial_version`; the overlay
-  /// shows whenever the stored version is below this. (Spec: TUTORIAL_VERSION.)
-  static const int gestureTutorialVersion = 1;
+  /// Bump to re-run the walkthrough after a gesture-mapping change.
+  /// Persisted per user as `profiles.gesture_tutorial_version`; the
+  /// walkthrough runs whenever the stored version is below this.
+  /// (Spec: TUTORIAL_VERSION.)
+  ///
+  /// 2 = Phase 17. Version 1 was the static four-row coach-mark; this is the
+  /// interactive walkthrough, and it teaches an action (following a story)
+  /// the old overlay never mentioned. Everyone who saw version 1 sees this
+  /// once, which is the point of versioning it.
+  static const int gestureTutorialVersion = 2;
 
   /// Newest articles kept per tracker. A tracker is a window onto a developing
   /// story, not an archive — older entries fall off as fresh coverage arrives.

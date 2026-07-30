@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'config/app_config.dart';
 import 'models/article.dart';
 import 'screens/home_shell.dart';
+import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/walkthrough_screen.dart';
 import 'screens/profile_screen.dart' show showAlgorithmSheet;
 import 'screens/browser_screen.dart';
 import 'screens/tracker_detail_screen.dart';
@@ -27,14 +29,22 @@ Future<void> main() async {
   // into the feed with all topics selected. Never persisted, so dev boots
   // don't overwrite the real profile.
   if (const bool.fromEnvironment('BITE_SKIP_ONBOARDING')) {
+    state.continueAsGuest();
     state.completeOnboarding({}, persist: false);
   }
   // Dev convenience: `--dart-define=BITE_SKIP_TUTORIAL=true` suppresses the
-  // first-run gesture coach-mark, which otherwise covers the deck on every
-  // fresh install. Screenshot-only — the simulator has no tap tooling here,
-  // and this never persists, so the real profile still sees the tutorial.
+  // first-run walkthrough, which otherwise stands between a fresh install and
+  // the deck. Screenshot-only: the simulator has no tap tooling here, so the
+  // walkthrough can't be completed there, and this never persists, so the real
+  // profile still gets it.
   if (const bool.fromEnvironment('BITE_SKIP_TUTORIAL')) {
     state.markGestureTutorialSeen(persist: false);
+  }
+  // Dev convenience: `--dart-define=BITE_SKIP_LOGIN=true` passes the Phase 17
+  // login gate at boot, so a screenshot build lands where it used to. In-memory
+  // only, like the two above.
+  if (const bool.fromEnvironment('BITE_SKIP_LOGIN')) {
+    state.continueAsGuest();
   }
   // Both fire-and-forget: hydration and content land whenever the network
   // answers; the UI never blocks on either.
@@ -211,14 +221,28 @@ class _RootState extends State<_Root> {
         });
       }
     }
-    // Dev convenience: force the onboarding screen for simulator screenshots
-    // even when the restored profile is already onboarded.
+    // Dev convenience: force a first-run screen for simulator screenshots even
+    // when the restored profile is well past it.
+    if (const bool.fromEnvironment('BITE_FORCE_LOGIN')) {
+      return const LoginScreen();
+    }
+    if (const bool.fromEnvironment('BITE_FORCE_WALKTHROUGH')) {
+      return const WalkthroughScreen();
+    }
     if (const bool.fromEnvironment('BITE_FORCE_ONBOARDING')) {
       return const OnboardingScreen();
     }
-    // While hydration is in flight for a not-yet-onboarded state, hold a
-    // blank page instead of flashing onboarding at a returning user.
-    if (state.hydrating && !state.onboarded) return const Scaffold();
+    // While hydration is in flight, hold a blank page rather than flashing the
+    // login screen at a returning reader: the gate is derived from the profile
+    // that is still on its way.
+    if (state.hydrating && !state.pastLoginGate) return const Scaffold();
+    // Phase 17 entry order: login gate, then the walkthrough (which teaches
+    // the deck), then the interest and region picker (which fills it), then
+    // the app. The walkthrough runs BEFORE onboarding on purpose: it is easier
+    // to choose topics for a deck you have already used than for one you have
+    // only been described.
+    if (!state.pastLoginGate) return const LoginScreen();
+    if (state.shouldShowWalkthrough) return const WalkthroughScreen();
     return state.onboarded ? const HomeShell() : const OnboardingScreen();
   }
 }
