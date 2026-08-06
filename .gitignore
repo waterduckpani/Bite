@@ -18,5 +18,8 @@ build/
 *.iml
 .DS_Store
 
+# Category harness feed cache (`node tools/category_harness.mjs --cache`)
+tools/.category_harness_cache.json
+
 # Claude Code local state
 .claude/scheduled_tasks.lock

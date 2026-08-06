@@ -47,6 +47,7 @@ import {
   type JunkSummary,
 } from "../_shared/junk.ts";
 import { hasUsableFullContent, parseFeed, type RssItem } from "../_shared/rss.ts";
+import { type AppCategory, categorize } from "../_shared/categorize.ts";
 
 /// Service-role client. Declared as a factory so `Db` is the exact inferred
 /// client type — annotating helpers with `ReturnType<typeof createClient>`
@@ -120,67 +121,15 @@ const BODY_WALL_BACKOFF = 3;
 const DEDUP_JACCARD = 0.5;
 
 // -- Category mapping -------------------------------------------------------
-// public.articles.category must be one of the app's six categories; the client
-// maps anything unknown to `world`. Feeds use wildly inconsistent vocabulary,
-// so we match the feed's own <category> values first, then fall back to the
-// URL path, then to `world`.
-
-type AppCategory =
-  | "tech" | "world" | "business" | "sports" | "science" | "entertainment";
-
-const CATEGORY_KEYWORDS: { category: AppCategory; words: string[] }[] = [
-  {
-    category: "tech",
-    words: ["tech", "technology", "science and tech", "gadget", "computing",
-      "artificial intelligence", "internet", "cyber", "software"],
-  },
-  {
-    category: "business",
-    words: ["business", "economy", "economic", "market", "finance",
-      "financial", "money", "trade", "companies", "industry"],
-  },
-  {
-    category: "sports",
-    words: ["sport", "sports", "cricket", "football", "soccer", "tennis",
-      "olympic", "hockey", "athletics"],
-  },
-  {
-    category: "science",
-    words: ["science", "environment", "climate", "health", "space",
-      "research", "nature", "medicine"],
-  },
-  {
-    category: "entertainment",
-    words: ["entertainment", "culture", "film", "movie", "music", "arts",
-      "books", "television", "tv", "celebrity", "bollywood", "lifestyle"],
-  },
-  {
-    category: "world",
-    words: ["world", "international", "global", "news", "india", "national",
-      "politics", "asia", "africa", "europe", "americas", "middle east"],
-  },
-];
-
-function categoryFor(item: RssItem, url: string): AppCategory {
-  const haystacks = [
-    ...item.categories.map((c) => c.toLowerCase()),
-    (() => {
-      try {
-        return new URL(url).pathname.toLowerCase().replace(/[-_/]+/g, " ");
-      } catch {
-        return "";
-      }
-    })(),
-  ];
-  for (const hay of haystacks) {
-    for (const { category, words } of CATEGORY_KEYWORDS) {
-      for (const word of words) {
-        if (hay.includes(word)) return category;
-      }
-    }
-  }
-  return "world";
-}
+// Phase 18 moved this to _shared/categorize.ts. It lives there, not here, so
+// that tools/category_harness.mjs can import and measure the REAL classifier
+// against live feeds rather than a transcription of it — which is how the
+// previous version's ~50% error rate went unnoticed for five phases.
+//
+// The one thing worth restating at the call site: the classifier needs the
+// FEED url, not just the article url. The old signature took only the article,
+// which is why BBC's dedicated technology and business feeds both resolved to
+// `world` — the section was known at fetch time and thrown away.
 
 // -- Part D2: opinion / editorial filter ------------------------------------
 // Excludes non-reporting content STRUCTURALLY, before summarisation, so no
@@ -294,6 +243,16 @@ interface Publisher {
   /// the per-region supply ceiling below. It has no effect on what is fetched
   /// or on which publishers run — every enabled publisher runs every cycle.
   region: string;
+  /// Phase 18 (migration 0024). The category a story from this publisher gets
+  /// when neither the feed section nor the item's own tags say anything
+  /// confident. For a pure-beat wire that is its beat; for a general daily it
+  /// is an explicit 'world'.
+  ///
+  /// This exists so `world` stops being both a real category and the null
+  /// value. Before it, 47% of all world rows had matched NOTHING and were
+  /// simply the classifier's return statement — Science Daily, a pure science
+  /// wire, was 100% `world`.
+  default_category: AppCategory | null;
 }
 
 // -- Dedup ------------------------------------------------------------------
@@ -422,6 +381,11 @@ interface PublisherRun {
   fetched: number;
   droppedOld: number;
   droppedOpinion: number;
+  /// Phase 18. Category counts for everything this publisher produced, so the
+  /// run report says what the classifier actually did. The audit that prompted
+  /// Phase 18 was only possible by replaying feeds offline; this makes the same
+  /// question answerable from the logs of a real run.
+  categories: Record<string, number>;
   error?: string;
 }
 
@@ -450,6 +414,7 @@ async function fetchPublisher(
     fetched: 0,
     droppedOld: 0,
     droppedOpinion: 0,
+    categories: {},
   };
 
   run.robots = await refreshRobots(supabase, publisher, log);
@@ -460,7 +425,11 @@ async function fetchPublisher(
   // publisher rather than on the feed. Six Guardian feeds must not mean six
   // times the slate share.
   const feeds = feedsOf(publisher);
-  const items: RssItem[] = [];
+  // Each item is kept WITH the feed it came from. Phase 18: the classifier
+  // treats a feed's declared section as its most authoritative signal, so
+  // merging the feeds into a bare RssItem[] here — as this did until now —
+  // destroyed the answer before anything could read it.
+  const items: { item: RssItem; feedUrl: string }[] = [];
   const feedErrors: string[] = [];
 
   for (const feedUrl of feeds) {
@@ -502,7 +471,7 @@ async function fetchPublisher(
       );
       continue;
     }
-    items.push(...parsed);
+    for (const item of parsed) items.push({ item, feedUrl });
   }
 
   run.fetched = items.length;
@@ -514,7 +483,7 @@ async function fetchPublisher(
   const cutoff = Date.now() - MAX_ITEM_AGE_HOURS * 3_600_000;
   const rows: ArticleRow[] = [];
 
-  for (const item of items) {
+  for (const { item, feedUrl } of items) {
     const url = canonicalUrl(item.link);
     if (!url.startsWith("http")) continue;
 
@@ -537,6 +506,18 @@ async function fetchPublisher(
     }
 
     const id = await rssArticleId(publisher.id, url);
+    // Traceable by design, like the opinion filter above: every label records
+    // the rule that produced it, so a wrong category in the deck can be walked
+    // back to a rule instead of being a mystery.
+    const category = categorize(item, url, feedUrl, publisher.default_category);
+    run.categories[category.category] =
+      (run.categories[category.category] ?? 0) + 1;
+    if (category.via === "publisher_default" && publisher.default_category === null) {
+      log.push(
+        `[ingest-rss] category fallback publisher=${publisher.id} has NO` +
+          ` default_category; defaulted to world (see migration 0024)`,
+      );
+    }
     const description = item.description || item.fullContent.slice(0, 400);
     const words = item.fullContent.length > 0
       ? item.fullContent.split(/\s+/).length
@@ -546,7 +527,7 @@ async function fetchPublisher(
       id,
       source: "rss",
       source_name: publisher.name,          // attribution: NOT NULL
-      category: categoryFor(item, url),
+      category: category.category,
       title: item.title,
       snippet: description.slice(0, 600),
       image_url: item.imageUrl,
@@ -677,7 +658,7 @@ Deno.serve(async (req) => {
     .select(
       "id, name, canonical_domain, rss_url, rss_urls, full_text_allowed," +
         " robots_checked_at, robots_crawl_delay, robots_rules, max_per_run," +
-        " body_wall_streak, region",
+        " body_wall_streak, region, default_category",
     )
     .eq("enabled", true)
     .order("id");
@@ -710,6 +691,7 @@ Deno.serve(async (req) => {
         fetched: 0,
         droppedOld: 0,
         droppedOpinion: 0,
+        categories: {},
         error: `${e}`,
       });
     }
@@ -937,11 +919,21 @@ Deno.serve(async (req) => {
         taken: takenPerPublisher.get(r.publisher.id) ?? 0,
         dropped_old: r.droppedOld,
         dropped_opinion: r.droppedOpinion,
+        categories: r.categories,
+        default_category: r.publisher.default_category,
         full_text_allowed: r.publisher.full_text_allowed,
         error: r.error ?? null,
       }]),
     ),
     selected: selected.length,
+    // Phase 18. The mix that was actually WRITTEN, which is the number the
+    // category imbalance is judged on — the per-publisher counts above cover
+    // everything a publisher produced, including rows the fair-share pass left
+    // on the floor.
+    per_category: selected.reduce((acc: Record<string, number>, s) => {
+      acc[s.row.category] = (acc[s.row.category] ?? 0) + 1;
+      return acc;
+    }, {}),
     per_region: Object.fromEntries(takenPerRegion),
     region_cap: regionCap,
     regions_capped: [...regionCapped],
