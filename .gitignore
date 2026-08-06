@@ -3,8 +3,10 @@
 supabase/functions/.env.secrets
 # Supabase CLI local link state
 supabase/.temp/
-# DB migrations kept local (contain deployed vault secret values)
-supabase/migrations/
+# NOTE: migrations are tracked as of Phase 18, by explicit choice. They embed
+# deployed vault secret values in plaintext (0002, 0003, 0005, 0011, 0013), and
+# this repo is public — rotate those secrets rather than relying on them being
+# unlisted here.
 
 # Flutter/Dart
 .dart_tool/

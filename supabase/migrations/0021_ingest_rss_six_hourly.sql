@@ -1,0 +1,48 @@
+-- Bite: ingest-rss moves from a 3-hourly to a 6-hourly cycle.
+-- Run in the SQL editor after 0020. No function redeploy needed for the
+-- schedule itself — but see the note on volume below.
+--
+-- WHAT CHANGES
+--
+--   bite-ingest-rss  '20 */3 * * *'  ->  '20 */6 * * *'
+--
+-- Still at :20, so it stays clear of summarise (:05/:35) and tracker matching
+-- (:15/:45). Runs drop from 8/day to 4/day: 00:20, 06:20, 12:20, 18:20 UTC.
+--
+-- VOLUME HALVES, DELIBERATELY
+--
+-- MAX_ARTICLES_PER_RUN_TOTAL stays at 25, so daily intake goes 200 -> 100.
+-- That was a deliberate choice, not an oversight: fewer function invocations,
+-- less LLM spend, and a gentler crawl for publishers. Two consequences to
+-- keep in mind rather than rediscover:
+--
+--   1. DAILY_SUMMARY_CAP (200) is no longer the binding constraint —
+--      INGESTION is. The cap becomes a safety ceiling that will not be
+--      reached. Raising the summariser's budget now buys nothing on its own;
+--      the per-run cap is the lever.
+--
+--   2. The feed pool is 48h, so the candidate set settles at ~200 articles
+--      (2 days x 100) against a p_limit of 200. Combined with the Phase 15.2
+--      bite gate, that is the deck's whole supply, where it used to have
+--      roughly double the headroom. If the deck starts running dry, raise
+--      MAX_ARTICLES_PER_RUN_TOTAL first — and note that per-publisher
+--      max_per_run (default 3, Guardian 6, ~30/run summed) becomes the
+--      binding constraint above about 30.
+--
+-- Worst-case staleness for a breaking story doubles from 3h to 6h. The feed's
+-- recency half-life is 36h, so ranking is unaffected; what changes is how
+-- fresh the freshest card can be.
+--
+-- ONE statement on purpose. cron.schedule() upserts on jobname in pg_cron
+-- >= 1.4 (Supabase ships 1.6) and this job was created with the named form in
+-- 0013, so it is updated in place — no unschedule needed. It is kept to a
+-- single statement because the Supabase SQL editor appends `limit 100` to what
+-- you run and mangles the semicolons in a multi-statement selection, which
+-- fails as "syntax error at or near select".
+
+select cron.schedule(
+  'bite-ingest-rss', '20 */6 * * *', 'select public.invoke_ingest_rss()');
+
+-- Verify (run separately):
+--   select jobname, schedule, active from cron.job
+--    where jobname = 'bite-ingest-rss';
