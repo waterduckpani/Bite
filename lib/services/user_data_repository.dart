@@ -95,19 +95,66 @@ class UserDataRepository {
 
   SupabaseClient get _client => Supabase.instance.client;
 
+  /// Whether the restored session has been checked against the server this
+  /// launch. A session we just created ourselves counts as checked.
+  bool _sessionChecked = false;
+
   /// Signs in anonymously when there's no restored session, so every user
   /// has an auth.users id. Session persistence itself is automatic.
+  ///
+  /// A restored session is verified once per launch before it is trusted.
+  /// Persistence is a keychain entry on iOS, which outlives even a reinstall,
+  /// so a session can name a user that no longer exists — delete the row in
+  /// the dashboard and the device keeps presenting a JWT whose `sub` resolves
+  /// to nothing. Every call then fails with "User from sub claim in JWT does
+  /// not exist", and because the client is convinced it is signed in, nothing
+  /// ever recovers on its own: writes queue and retry forever, and sign-in
+  /// dies on the send-code step. One round trip at startup turns that
+  /// permanent brick into a fresh guest.
   Future<bool> _ensureSession() async {
     final auth = _client.auth;
-    if (auth.currentSession != null) return true;
+    if (auth.currentSession != null) {
+      if (_sessionChecked) return true;
+      try {
+        await auth.getUser().timeout(const Duration(seconds: 8));
+        _sessionChecked = true;
+        return true;
+      } on AuthException catch (e) {
+        if (!_isDeadSession(e)) {
+          // Reachable but unhappy (offline, 5xx). Keep the session: it is
+          // probably fine, and discarding it would strand the user's data.
+          debugPrint('UserDataRepository: session check inconclusive ($e)');
+          return true;
+        }
+        debugPrint('UserDataRepository: stored session is dead (${e.code}); '
+            'starting a fresh guest');
+        // Local-only: a server sign-out would fail for the same reason.
+        try {
+          await auth.signOut(scope: SignOutScope.local);
+        } catch (_) {}
+      } catch (e) {
+        debugPrint('UserDataRepository: session check failed ($e)');
+        return true;
+      }
+    }
     try {
       await auth.signInAnonymously().timeout(const Duration(seconds: 8));
+      _sessionChecked = true;
       return true;
     } catch (e) {
       debugPrint('UserDataRepository: anonymous sign-in failed ($e)');
       return false;
     }
   }
+
+  /// Whether [e] means the session names a user or token the server won't
+  /// honour again — the only case worth throwing a stored session away for.
+  static bool _isDeadSession(AuthException e) =>
+      e.code == 'user_not_found' ||
+      e.code == 'session_not_found' ||
+      e.code == 'bad_jwt' ||
+      e.code == 'refresh_token_not_found' ||
+      e.message.contains('sub claim');
 
   String get _uid => _client.auth.currentUser!.id;
 
@@ -135,11 +182,18 @@ class UserDataRepository {
     }
     if (accountEmail == null) {
       try {
-        await _client.auth
-            .updateUser(UserAttributes(email: email))
-            .timeout(const Duration(seconds: 12));
+        await _linkEmailToGuest(email);
         return EmailOtpMode.linkToGuest;
       } on AuthException catch (e) {
+        if (_isDeadSession(e)) {
+          // The user was deleted after this launch's session check, so the
+          // token looked fine until we used it. Rebuild the guest and retry
+          // once; there is no data to lose, since that user is gone.
+          _sessionChecked = false;
+          if (!await _ensureSession()) rethrow;
+          await _linkEmailToGuest(email);
+          return EmailOtpMode.linkToGuest;
+        }
         // 422 email_exists: the address is already registered.
         if (e.code != 'email_exists' && e.statusCode != '422') rethrow;
       }
@@ -149,6 +203,12 @@ class UserDataRepository {
         .timeout(const Duration(seconds: 12));
     return EmailOtpMode.signInExisting;
   }
+
+  /// Attaches [email] to the current anonymous user, which is what makes the
+  /// upgrade keep the user id (and so every save and swipe).
+  Future<void> _linkEmailToGuest(String email) => _client.auth
+      .updateUser(UserAttributes(email: email))
+      .timeout(const Duration(seconds: 12));
 
   /// Verifies the emailed code. Returns true when the device switched to a
   /// different user id (existing account) — the caller must re-hydrate.

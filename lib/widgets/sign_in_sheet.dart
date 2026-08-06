@@ -12,6 +12,13 @@ import 'pressable.dart';
 /// The sheet's three stages: pick a method, type the email, type the code.
 enum SignInStage { options, email, code }
 
+/// Length of the emailed code, mirroring the Supabase project's
+/// **Auth → Emails → Email OTP Length** setting. GoTrue decides how many
+/// digits it generates; this only has to agree with it. If that setting ever
+/// changes, change this with it — a mismatch makes the code unenterable,
+/// because the field caps input and auto-submits at exactly this length.
+const int _otpLength = 8;
+
 /// Opens the sign-in sheet. Guests upgrade in place (their saves and history
 /// carry over); resolves after the sheet closes.
 Future<void> showSignInSheet(BuildContext context,
@@ -96,7 +103,7 @@ class _SignInSheetState extends State<SignInSheet> {
 
   Future<void> _verifyCode() async {
     final code = _codeController.text.trim();
-    if (code.length != 6 || _busy || _mode == null) return;
+    if (code.length != _otpLength || _busy || _mode == null) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -229,7 +236,7 @@ class _SignInSheetState extends State<SignInSheet> {
       Text('What\'s your email?', style: display(size: 24, weight: 640)),
       const SizedBox(height: 6),
       Text(
-        'We\'ll send a 6-digit code, no password to remember.',
+        'We\'ll send a $_otpLength-digit code, no password to remember.',
         style: sans(size: 13.5, color: bite.muted, height: 1.5),
       ),
       const SizedBox(height: 20),
@@ -263,7 +270,7 @@ class _SignInSheetState extends State<SignInSheet> {
       Text('Check your inbox', style: display(size: 24, weight: 640)),
       const SizedBox(height: 6),
       Text(
-        'Enter the 6-digit code we sent to $_email.',
+        'Enter the $_otpLength-digit code we sent to $_email.',
         style: sans(size: 13.5, color: bite.muted, height: 1.5),
       ),
       if (_mode == EmailOtpMode.signInExisting) ...[
@@ -288,23 +295,25 @@ class _SignInSheetState extends State<SignInSheet> {
         enabled: !_busy,
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
-        maxLength: 6,
+        maxLength: _otpLength,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         autofillHints: const [AutofillHints.oneTimeCode],
-        style: display(size: 26, weight: 620, color: bite.ink, spacing: 8),
+        style: display(size: 24, weight: 620, color: bite.ink, spacing: 6),
         cursorColor: bite.accent,
         onChanged: (v) {
           setState(() {});
-          if (v.length == 6) _verifyCode();
+          if (v.length == _otpLength) _verifyCode();
         },
-        decoration: _fieldDecoration(bite, hint: '••••••', counter: ''),
+        decoration: _fieldDecoration(bite,
+            hint: '•' * _otpLength, counter: ''),
       ),
       if (_error != null) _errorNote(bite),
       const SizedBox(height: 14),
       Pressable(
         child: FilledButton(
-          onPressed:
-              _codeController.text.length == 6 && !_busy ? _verifyCode : null,
+          onPressed: _codeController.text.length == _otpLength && !_busy
+              ? _verifyCode
+              : null,
           child: _busy ? _spinner(bite) : const Text('Verify'),
         ),
       ),

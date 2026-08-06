@@ -4,22 +4,26 @@ import 'package:flutter/services.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable.dart';
+import '../widgets/sign_in_sheet.dart';
 
 /// The app's front door (Phase 17).
 ///
-/// Shown on first open and whenever the user is logged out. Exactly one path
-/// through it works, and the screen says so: **Continue as guest** enters the
-/// app for real, and the account options are rendered but inert.
+/// Shown on first open and whenever the user is logged out. Two paths work and
+/// they are ranked, not merely listed: **Continue with email** is the hero,
+/// because an account is what makes saves survive a reinstall or a second
+/// device, and **Continue as guest** sits under it as the lower-commitment
+/// escape hatch. Guest is not hidden or discouraged in copy; it is simply not
+/// the default read.
 ///
-/// They are rendered inert rather than hidden, and inert rather than
-/// half-working. The email and Apple paths are both fully wired underneath
-/// (`showSignInSheet`, and `AppConfig.appleSignInEnabled` for the Apple half)
-/// but neither can complete yet: email OTP is waiting on SMTP and a sending
-/// domain, and Apple is waiting on a Developer Program membership. A button
-/// that opens a flow
-/// which cannot finish is worse than a button that admits it isn't ready, so
-/// this one admits it. When the backing services land, drop the `enabled:
-/// false` here and the sheet behind it is already built.
+/// Email opens [showSignInSheet] straight at the address field, skipping the
+/// sheet's own method picker — the choice was already made by the button that
+/// got here. The 6-digit code, the guest-upgrade linking, and the
+/// already-registered fallback all live in that sheet and in
+/// `UserDataRepository.sendEmailOtp`.
+///
+/// Apple stays rendered-but-inert: it is waiting on a Developer Program
+/// membership (see `AppConfig.appleSignInEnabled`), and a button that opens a
+/// flow which cannot finish is worse than one that admits it isn't ready.
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -27,6 +31,10 @@ class LoginScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final bite = context.bite;
+    // Without Supabase the app is guest-only in memory, so there is no account
+    // to sign into. The hero keeps its place (the ranking shouldn't shuffle
+    // between builds) and simply doesn't respond.
+    final emailReady = state.hasAccounts;
 
     return Scaffold(
       body: SafeArea(
@@ -69,23 +77,18 @@ class LoginScreen extends StatelessWidget {
                 style: sans(size: 15, color: bite.muted, height: 1.5),
               ),
               const Spacer(flex: 3),
-              Pressable(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 54)),
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    state.continueAsGuest();
-                  },
-                  child: const Text('Continue as guest'),
-                ),
-              ),
+              _EmailHero(enabled: emailReady),
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'No account needed. Your saves live on this device.',
+                  'No password. We\'ll email you a code.',
                   style: sans(size: 12, color: bite.faint),
                 ),
+              ),
+              const SizedBox(height: 18),
+              const _InactiveOption(
+                icon: Icons.apple,
+                label: 'Continue with Apple',
               ),
               const SizedBox(height: 26),
               Row(
@@ -101,26 +104,81 @@ class LoginScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 18),
-              const _InactiveOption(
-                icon: Icons.mail_outline,
-                label: 'Continue with email',
-              ),
-              const SizedBox(height: 10),
-              const _InactiveOption(
-                icon: Icons.apple,
-                label: 'Continue with Apple',
-              ),
-              const SizedBox(height: 14),
+              _GuestButton(onPressed: () {
+                HapticFeedback.lightImpact();
+                state.continueAsGuest();
+              }),
+              const SizedBox(height: 12),
               Center(
                 child: Text(
-                  'Accounts are not switched on yet. When they are, guest '
-                  'saves and history come with you.',
+                  'Browsing as a guest works fully. Add an email later and '
+                  'your saves, trackers and history come with you.',
                   textAlign: TextAlign.center,
                   style: sans(size: 12, color: bite.faint, height: 1.45),
                 ),
               ),
               const Spacer(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hero: the one option the screen is actually steering towards. Taller
+/// than the rest (54 vs 52) and the only accent-filled control on the screen.
+class _EmailHero extends StatelessWidget {
+  const _EmailHero({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = FilledButton.icon(
+      style: FilledButton.styleFrom(
+          minimumSize: const Size(double.infinity, 54)),
+      onPressed: enabled ? () => _open(context) : null,
+      icon: const Icon(Icons.mail_outline, size: 19),
+      label: const Text('Continue with email'),
+    );
+    return enabled ? Pressable(child: button) : button;
+  }
+
+  void _open(BuildContext context) {
+    HapticFeedback.lightImpact();
+    // Straight to the address field: the method was chosen by the tap.
+    showSignInSheet(context, initialStage: SignInStage.email);
+  }
+}
+
+/// The secondary path: a live button, deliberately quieter than the hero.
+/// Same shape and height as the account options so the column reads as one
+/// stack, but outlined rather than filled.
+class _GuestButton extends StatelessWidget {
+  const _GuestButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    return Semantics(
+      button: true,
+      child: Pressable(
+        onTap: onPressed,
+        haptic: false,
+        child: Container(
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bite.card,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: bite.border, width: 0.75),
+          ),
+          child: Text(
+            'Continue as guest',
+            style: sans(size: 15, weight: FontWeight.w600, color: bite.ink),
           ),
         ),
       ),
