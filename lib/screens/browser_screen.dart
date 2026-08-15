@@ -396,7 +396,7 @@ class _LoadingPane extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'The story is still there — try again, or read it in '
+                    'The story is still there. Try again, or read it in '
                     'your browser.',
                     style: sans(size: 13, height: 1.5, color: bite.muted),
                   ),

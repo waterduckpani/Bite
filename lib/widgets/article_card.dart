@@ -75,9 +75,20 @@ const double _kNoPhotoBand = 76;
 /// A 40-word bite therefore yields a taller cover rather than a dead gap, and
 /// an 80-word bite squeezes the cover down to its floor rather than clipping.
 class ArticleCard extends StatelessWidget {
-  const ArticleCard({super.key, required this.article});
+  const ArticleCard({super.key, required this.article, this.following});
 
   final Article article;
+
+  /// Overrides the followed-state marker instead of reading it from
+  /// [AppState]. Null (the default, and every live use) reads the real
+  /// trackers.
+  ///
+  /// Exists for the Phase 17 walkthrough, whose practice cards must be able to
+  /// show a followed badge without a tracker existing anywhere. Passing the
+  /// state in is what keeps that promise structural: with an override set the
+  /// card never touches [AppScope] at all, so the sandbox cannot leak into it
+  /// by accident later.
+  final bool? following;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +122,7 @@ class ArticleCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Takes the leftover: whatever the bite doesn't need.
-              Expanded(child: _Cover(article: article)),
+              Expanded(child: _Cover(article: article, following: following)),
               // Capped so the cover can never be squeezed below its floor,
               // which is also what keeps the cue on-card at 80 words.
               ConstrainedBox(
@@ -135,12 +146,17 @@ class ArticleCard extends StatelessWidget {
 /// a deliberate band rather than a blank or a broken-image glyph. Same widget
 /// either way, so there is no layout jump between the two states.
 class _Cover extends StatelessWidget {
-  const _Cover({required this.article});
+  const _Cover({required this.article, this.following});
 
   final Article article;
 
+  /// See [ArticleCard.following].
+  final bool? following;
+
   @override
   Widget build(BuildContext context) {
+    final isFollowing =
+        following ?? AppScope.of(context).isFollowing(article.id);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -160,7 +176,7 @@ class _Cover extends StatelessWidget {
         ),
         // Followed-state marker (Phase 13): shows this story is already
         // tracked, so it reads as followed and can't be double-followed.
-        if (AppScope.of(context).isFollowing(article.id))
+        if (isFollowing)
           const Positioned(top: 14, right: 14, child: _FollowingBadge()),
       ],
     );

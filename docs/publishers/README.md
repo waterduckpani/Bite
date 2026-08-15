@@ -284,6 +284,61 @@ go), or qualify additional candidates such as `organiser.org`,
 `opindia.com`, or `news18.com` — weighing each against the Part A requirement
 for a real reporting desk and a corrections policy.
 
+## Phase 18 — `default_category` (migration 0024)
+
+Every registry row now carries a **`default_category`**: the category a story
+from that publisher gets when neither the feed section nor the item's own
+`<category>` tags say anything confident.
+
+This exists because `world` had been doing double duty as a real category *and*
+as the classifier's return statement. Replaying all 26 live feeds through the
+shipping code (`node tools/category_harness.mjs`, 1,384 real items) showed
+**47% of every `world` row had matched nothing at all** — Science Daily, a pure
+science wire, was 100% `world`; ESPN was 50% `world`.
+
+| Publisher | `default_category` |
+| --- | --- |
+| `sciencedaily`, `sciencenews` | `science` |
+| `espn` | `sports` |
+| `techcrunch`, `theverge`, `wired` | `tech` |
+| `cnbc` | `business` |
+| the other 19 general outlets | `world`, explicitly |
+
+The classifier (`supabase/functions/_shared/categorize.ts`) reaches this only
+last: **feed section → item tags and URL section → `default_category`**. A
+publisher's tech or business story is still caught by the first two rules,
+which is why BBC's technology and business feeds now classify as `tech` and
+`business` rather than the `world` they collapsed into before.
+
+### The harness, and what it says about *sources*
+
+```bash
+node tools/category_harness.mjs            # fetch all 26 feeds, old vs new
+node tools/category_harness.mjs --cache    # reuse the last fetch
+```
+
+It imports the real classifier rather than a copy — the previous version's
+error rate went unnoticed for five phases precisely because nothing measured
+it. Its **`blind%`** column is a qualification fact worth recording here: the
+share of a publisher's items that expose *no* feed section, *no* usable tag and
+*no* section in the article path, so nothing but `default_category` can ever
+apply to them.
+
+| Publisher | items | `blind%` |
+| --- | --- | --- |
+| `dw` | 146 | 98.6% |
+| `scroll` | 100 | 97.0% |
+| `thehindu` | 59 | 78.0% |
+| `newindianexpress` | 51 | 76.5% |
+| `deccanherald` | 44 | 75.0% |
+| `thehill` | 75 | 69.3% |
+
+These are high-volume, genuinely multi-beat outlets whose entire output can
+only ever be labelled `world`. That is a **supply** limit, not a classifier
+one, and the fix is the same one that worked for the BBC and the Guardian —
+per-section feeds in `rss_urls`. DW, The Hindu and Scroll all publish them.
+Qualify them with `tools/qualify_publisher.dart --feed=…` before adding any.
+
 ## What the script checks
 
 1. Does an RSS/Atom feed exist, and where?

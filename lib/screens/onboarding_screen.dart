@@ -99,7 +99,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       const SizedBox(height: 6),
                       Text(
                         'We’ll lift coverage from your part of the world a '
-                        'little higher. You still see everything — it’s a '
+                        'little higher. You still see everything, and it’s a '
                         'nudge, not a filter, and no location access is used.',
                         style: sans(size: 13, color: bite.muted, height: 1.4),
                       ),
