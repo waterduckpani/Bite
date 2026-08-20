@@ -88,7 +88,16 @@ const FALLBACK_MODELS = [
 /// The ~$0.0007/bite figure carried in comments from 0013 through Phase 15 was
 /// about 5x too high. It was never checked because nothing read the ledger
 /// back; the run log below now does, every run.
-const DAILY_SUMMARY_CAP = 200;
+///
+/// PHASE 19: raised 200 -> 600. Phase 16 took ingestion to ~192 articles/day
+/// against a 200/day ceiling, which is not a budget — it is the ingest rate
+/// with eight slots of slack. Any backlog, any re-queue, any publisher added
+/// to the registry pushed straight into the cap, and because the feed gates on
+/// the bite (migration 0020) a capped-out day is a thinner deck rather than a
+/// louder log line. At the measured ~$0.00015/bite, 600/day is ~$0.09/day —
+/// ~$2.70/month — so the ceiling now sits where it belongs: high enough to be
+/// a runaway-cost backstop, not a throughput limit that shapes the product.
+const DAILY_SUMMARY_CAP = 600;
 
 const BATCH_SIZE = 25;
 const CONCURRENCY = 4;
@@ -96,9 +105,29 @@ const MAX_ATTEMPTS = 3;
 const INPUT_CHAR_CAP = 6000; // ~1.5k tokens of leading body text
 const OUTPUT_MAX_TOKENS = 220; // one hook + <=80 words, with headroom
 
-/// Below this, a description is too thin to summarise into anything better
-/// than itself — the card falls back to the snippet, which reads the same.
-const MIN_DESCRIPTION_CHARS = 160;
+/// Below this a description is headline-only: there is no second fact for a
+/// bite to carry, so the model would be padding rather than summarising.
+///
+/// PHASE 19: lowered 160 -> 60, and the reason the old number existed is worth
+/// recording because it is exactly the kind of assumption that rots silently.
+/// 160 was set in Phase 14, when its justification was true: "the card falls
+/// back to the snippet, which reads the same", so refusing to summarise a thin
+/// description cost nothing — the reader saw the description instead.
+///
+/// Migration 0020 (Phase 15.2) put the bite ON the card face and gated the
+/// feed on it. From that moment the fallback did not exist: a row we declined
+/// to summarise was not shown as a snippet, it was NOT SHOWN. The threshold
+/// went on measuring against a fallback that had been deleted, and quietly
+/// removed 729 articles — 25% of the pool — from every reader's deck, with
+/// aljazeera, cnbc, independent, skynews and espn worst hit because their
+/// feeds run 90-130 character descriptions as a house style. Every one of
+/// those 729 failed for this reason and no other.
+///
+/// 60 chars of description plus the headline (which is always supplied to the
+/// model as well) is two independent facts — enough for the 2-3 sentence bite
+/// the prompt asks for, and the prompt already tells the model to summarise
+/// only what is there and stop when the text is thin.
+const MIN_DESCRIPTION_CHARS = 60;
 
 type InputMode = "body" | "description";
 
@@ -316,7 +345,13 @@ interface Candidate {
 
 Deno.serve(async (req) => {
   const secret = Deno.env.get("SUMMARIZE_SECRET");
-  if (secret && req.headers.get("x-summarize-secret") !== secret) {
+  // FAIL CLOSED (Phase 19). This was `if (secret && ...)`, which meant an
+  // absent SUMMARIZE_SECRET did not fail the check — it REMOVED it. Combined with
+  // --no-verify-jwt that made the function completely open to the internet,
+  // and the trigger for it was a botched or half-finished secret rotation:
+  // exactly the moment you most want the door shut. A missing secret is now a
+  // misconfiguration and is refused like a wrong one.
+  if (!secret || req.headers.get("x-summarize-secret") !== secret) {
     return new Response("forbidden", { status: 403 });
   }
 
@@ -413,8 +448,30 @@ Deno.serve(async (req) => {
 
   await runPool(batch, CONCURRENCY, async (row) => {
     const attempts = row.ai_summary_attempts ?? 0;
+
+    // PERMANENTLY ineligible, as distinct from failed. `snippet` is a static
+    // column written once at ingest: if it is too thin now it will be too thin
+    // on every future run, so spending three attempts to re-read the same
+    // string is pure waste and leaves the row indistinguishable in the metrics
+    // from a real model or network failure. Park it as 'skipped' on the first
+    // look. The selection query takes only null/pending rows, so 'skipped' is
+    // terminal in the same way 'failed' is — but it names the actual reason,
+    // and it keeps `failed` meaning "we tried and could not", which is the
+    // number worth alerting on.
+    const markIneligible = async (reason: string) => {
+      await supabase
+        .from("articles")
+        .update({ ai_summary_status: "skipped" })
+        .eq("id", row.id);
+      skipped++;
+      unusedSlots++; // never reached the model, so it never spent its slot
+      console.log(`summarize skip id=${row.id} reason="${reason}"`);
+    };
+
     // Roll a failure back to null so it retries next run, unless it has hit
-    // the cap — then park it as failed. A failed row still displays fine.
+    // the cap — then park it as failed. Reserved for transient causes: model
+    // errors, unparseable output, database writes. Anything determined by the
+    // row's own fixed content belongs in markIneligible above.
     const markFailure = async (reason: string, refundSlot: boolean) => {
       const next = attempts + 1;
       await supabase
@@ -447,8 +504,12 @@ Deno.serve(async (req) => {
         text = `${row.snippet ?? ""}`.trim();
         mode = "description";
         if (text.length < MIN_DESCRIPTION_CHARS) {
-          // Too thin to improve on — the card shows the snippet either way.
-          await markFailure(`description too thin (${text.length} chars)`, true);
+          // Headline-only: nothing here for a bite to carry beyond the title
+          // the card already shows. Not a failure and not retryable — see
+          // markIneligible.
+          await markIneligible(
+            `description headline-only (${text.length} chars < ${MIN_DESCRIPTION_CHARS})`,
+          );
           return;
         }
       }

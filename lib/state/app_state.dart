@@ -9,6 +9,7 @@ import '../models/article.dart';
 import '../models/region.dart';
 import '../models/story_tracker.dart';
 import '../models/taste_profile.dart';
+import '../services/local_prefs.dart';
 import '../services/user_data_repository.dart';
 
 /// Where the current article pool came from.
@@ -59,14 +60,23 @@ class AppState extends ChangeNotifier {
   /// The user's region (Phase 16). [Region.global] applies no feed boost.
   Region region = Region.global;
 
-  /// TEMPORARY (dev): appearance override for testing light/dark in-app.
-  /// In-memory only — never persisted, so every launch starts on `system`.
-  ThemeMode themeMode = ThemeMode.system;
+  /// Appearance. Seeded from the device store at construction — synchronously,
+  /// because a theme that arrives one frame late is a flash of the wrong one —
+  /// and written back on every change.
+  ///
+  /// Device-local rather than account-bound on purpose: see [LocalPrefs]. This
+  /// was a "TEMPORARY (dev)" in-memory toggle through Phase 18, which meant the
+  /// only appearance control in the app forgot the reader's choice on every
+  /// launch. A setting that resets itself is worse than no setting.
+  ThemeMode themeMode = LocalPrefs.themeMode;
 
   void setThemeMode(ThemeMode mode) {
     if (themeMode == mode) return;
     themeMode = mode;
     notifyListeners();
+    // Fire-and-forget: the UI has already changed, and a failed write costs
+    // the reader nothing but having to choose again next launch.
+    LocalPrefs.setThemeMode(mode);
   }
 
   // Rejected (swiped-left) cards — cleared by "reset feed", mirroring the
@@ -626,6 +636,28 @@ class AppState extends ChangeNotifier {
     // login screen rather than dropped into an unexplained guest deck.
     _passedLoginGate = false;
     deckEpoch++;
+    notifyListeners();
+  }
+
+  /// Permanently deletes the account and returns the device to a clean, fresh
+  /// guest sitting at the login gate.
+  ///
+  /// Deliberately NOT modelled on [signOut], which carefully carries topics,
+  /// region and the walkthrough flag onto the new guest so the reader isn't
+  /// bounced back through onboarding. That kindness is exactly wrong here: a
+  /// reader who asked for their data to be deleted must not watch their topic
+  /// picks reappear on the next screen. [_resetLocal] clears all of it, and
+  /// nothing is written back to the new guest profile afterwards.
+  ///
+  /// The server call comes FIRST and is allowed to throw. If deletion fails we
+  /// leave the reader signed in with their data intact and let the UI say so —
+  /// wiping locally on a failed delete would show them an empty app while the
+  /// server still held everything, which is the one outcome worse than an
+  /// error message.
+  Future<void> deleteAccount() async {
+    await _repo!.deleteAccount();
+    _resetLocal();
+    _passedLoginGate = false;
     notifyListeners();
   }
 

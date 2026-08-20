@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/feed_config.dart';
 import '../models/article.dart';
@@ -185,12 +186,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 28),
-          // TEMPORARY (dev): appearance override for testing light vs. dark.
-          // Not persisted — every launch starts on Auto.
+          // Persisted per-device since Phase 19 (see LocalPrefs). It was a dev
+          // toggle that reset to Auto on every launch, which is a setting that
+          // lies about being one.
           Text('APPEARANCE', style: caps(size: 11, color: bite.muted)),
           const SizedBox(height: 4),
           Text(
-            'Testing only. Resets to Auto next launch.',
+            'Auto follows your device. Saved on this device.',
             style: sans(size: 12.5, color: bite.muted),
           ),
           const SizedBox(height: 12),
@@ -264,6 +266,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: const Text('Sign out'),
               ),
             ),
+          ],
+          const SizedBox(height: 32),
+          const _LegalLinks(),
+          // Account deletion has to be reachable from inside the app (App
+          // Store guideline 5.1.1(v), GDPR Art. 17, DPDP s.12(3)) — not by
+          // email, not via a web form. It is placed last and styled as the
+          // only destructive control on the screen, which is where a
+          // permanent action belongs: findable without hunting, never
+          // adjacent to something you were reaching for.
+          //
+          // Guests are excluded because there is no account to delete. Their
+          // data is a local anonymous session; "Bring back skipped stories"
+          // and reinstalling cover them, and offering "Delete account" to
+          // someone who never made one is just alarming.
+          if (state.isSignedIn) ...[
+            const SizedBox(height: 18),
+            const _DeleteAccountButton(),
           ],
           const SizedBox(height: 32),
           Center(
@@ -825,5 +844,158 @@ class _Stat extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Privacy policy and terms, reachable from inside the app.
+///
+/// App Store Connect requires a privacy-policy URL as submission metadata, but
+/// metadata is not the same as a link a reader can actually find while using
+/// the app, and both GDPR (Arts. 13–14) and the DPDP Act expect the notice to
+/// be accessible at the point the data is being collected — which is here, not
+/// on a store listing they saw once.
+///
+/// These open in the system browser rather than Bite's in-app one on purpose:
+/// the in-app browser is the *publisher* reading surface, wrapped in Save /
+/// Follow / Share controls that make no sense around a legal document.
+class _LegalLinks extends StatelessWidget {
+  const _LegalLinks();
+
+  static final _privacy = Uri.parse('https://waterduckpani.github.io/Bite/privacy/');
+  static final _terms = Uri.parse('https://waterduckpani.github.io/Bite/terms/');
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _link(context, 'Privacy', _privacy),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text('·', style: sans(size: 12, color: bite.faint)),
+        ),
+        _link(context, 'Terms', _terms),
+      ],
+    );
+  }
+
+  Widget _link(BuildContext context, String label, Uri uri) {
+    final bite = context.bite;
+    return Semantics(
+      link: true,
+      child: Pressable(
+        haptic: false,
+        onTap: () => launchUrl(uri, mode: LaunchMode.externalApplication),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text(
+            label,
+            style: sans(size: 12.5, color: bite.muted).copyWith(
+              decoration: TextDecoration.underline,
+              decorationColor: bite.border,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Delete account", and the confirmation standing in front of it.
+///
+/// The dialog spells out what goes rather than asking "are you sure?", because
+/// the reader's actual question is "what am I losing" — saves, the taste model
+/// the whole app is built around, and their trackers. It also states the one
+/// thing that is kept and why, since the privacy policy makes that promise and
+/// the two must not disagree.
+///
+/// The destructive action is the *second* button and is not the default, and
+/// the flow blocks with a spinner while the server call is in flight so the
+/// button cannot be pressed twice. A failure keeps the reader exactly where
+/// they were, with the error visible: reporting success on a failed deletion
+/// would leave someone believing their data was gone when it was not.
+class _DeleteAccountButton extends StatefulWidget {
+  const _DeleteAccountButton();
+
+  @override
+  State<_DeleteAccountButton> createState() => _DeleteAccountButtonState();
+}
+
+class _DeleteAccountButtonState extends State<_DeleteAccountButton> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bite = context.bite;
+    return Pressable(
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          minimumSize: const Size.fromHeight(44),
+          foregroundColor: bite.danger,
+          textStyle: sans(size: 13.5, weight: FontWeight.w500),
+        ),
+        onPressed: _busy ? null : _confirm,
+        icon: _busy
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: bite.danger),
+              )
+            : const Icon(Icons.delete_outline, size: 17),
+        label: Text(_busy ? 'Deleting…' : 'Delete account'),
+      ),
+    );
+  }
+
+  Future<void> _confirm() async {
+    HapticFeedback.selectionClick();
+    final state = AppScope.of(context);
+    final bite = context.bite;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete your account?',
+            style: display(size: 19, weight: 640)),
+        content: Text(
+          'This permanently deletes your saved stories, your reading history '
+          'and the taste model built from it, and every story you follow. It '
+          'cannot be undone.\n\n'
+          'Anonymous click counts we report to publishers are kept, with no '
+          'link to you.',
+          style: sans(size: 13.5, color: bite.muted, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: bite.danger),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await state.deleteAccount();
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Your account and its data have been deleted.'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      messenger.showSnackBar(SnackBar(
+        content: const Text(
+            'Could not delete your account. Nothing was removed — please try again.'),
+        action: SnackBarAction(label: 'Retry', onPressed: _confirm),
+      ));
+    }
   }
 }

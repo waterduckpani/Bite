@@ -241,6 +241,37 @@ class UserDataRepository {
     await _ensureSession();
   }
 
+  /// Permanently deletes the signed-in account and everything derived from it,
+  /// then starts a fresh guest session so the app still has an identity to
+  /// persist against (exactly what [signOut] does — deleting an account leaves
+  /// you a new reader, not a broken one).
+  ///
+  /// The server does the work in one transaction; see the `delete_account`
+  /// RPC in migration 0027 for precisely what goes and what is anonymised.
+  /// Nothing is deleted client-side first: if the RPC fails we must not have
+  /// already thrown away the local copy of data that still exists on the
+  /// server.
+  ///
+  /// Throws on failure so the caller can keep the reader on the confirmation
+  /// screen and say so. A silent failure here would be the worst possible
+  /// outcome — the reader believes their data is gone and it is not.
+  Future<void> deleteAccount() async {
+    if (!enabled) return;
+    await _client.rpc('delete_account').timeout(const Duration(seconds: 15));
+    // The JWT is now for a user that no longer exists; drop it locally rather
+    // than calling the server, which would reject it.
+    try {
+      await _client.auth
+          .signOut(scope: SignOutScope.local)
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('UserDataRepository: post-delete sign-out failed ($e)');
+    }
+    // accountEmail is derived from the live session, so the new anonymous one
+    // returns it to null on its own — there is no cached copy to clear.
+    await _ensureSession();
+  }
+
   /// Native Apple sign-in. Dormant until [AppConfig.appleSignInEnabled] —
   /// see the activation checklist there before flipping the flag.
   Future<bool> signInWithApple() async {

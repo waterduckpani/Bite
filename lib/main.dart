@@ -10,6 +10,7 @@ import 'screens/profile_screen.dart' show showAlgorithmSheet;
 import 'screens/browser_screen.dart';
 import 'screens/tracker_detail_screen.dart';
 import 'screens/tracker_management_screen.dart';
+import 'services/local_prefs.dart';
 import 'services/user_data_repository.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
@@ -19,6 +20,10 @@ import 'widgets/sign_in_sheet.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.load();
+  // Before the first frame, on purpose: AppState reads the stored appearance
+  // synchronously in its constructor, so this has to have landed by then or
+  // the app boots light and snaps to dark.
+  await LocalPrefs.load();
 
   // Disabled (a no-op) when Supabase isn't configured or init fails — the
   // app then runs fully in-memory as before.
@@ -63,8 +68,8 @@ class BiteApp extends StatelessWidget {
     return AppScope(
       state: state,
       // The MaterialApp is the scope's child, so it doesn't rebuild on
-      // notify by itself — this listener is what lets the in-app appearance
-      // toggle (temporary, Profile screen) reach themeMode.
+      // notify by itself — this listener is what lets the Profile appearance
+      // setting reach themeMode.
       child: ListenableBuilder(
         listenable: state,
         builder: (context, _) => MaterialApp(

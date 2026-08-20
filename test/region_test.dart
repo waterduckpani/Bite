@@ -121,6 +121,18 @@ void main() {
       await tester.tap(pill, warnIfMissed: true);
       await tester.pumpAndSettle();
       expect(state.region, Region.australia, reason: 'in $mode');
+
+      // Tear the tree down between iterations. pumpWidget reuses the element
+      // tree when the widget types match, so the second pass would otherwise
+      // inherit the FIRST pass's scroll offset — this loop scrolls Profile
+      // down to reach the Australia pill. That made the test quietly
+      // order-dependent: it passed only while Profile's content was short
+      // enough that everything stayed within the ListView's built range from
+      // any offset, and broke the moment the screen grew (Phase 19 added the
+      // privacy/terms links and account deletion below the fold). Each
+      // iteration should start from a fresh, unscrolled app.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     }
   });
 }

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/article.dart';
@@ -30,19 +31,24 @@ class CoverArt extends StatelessWidget {
             decoration: BoxDecoration(gradient: article.palette.gradient),
           ),
           if (hasImage)
-            Image.network(
-              article.imageUrl,
+            // Disk-cached, not just memory-cached. Image.network keeps decoded
+            // frames in an in-memory cache that is emptied on every relaunch
+            // and evicted under pressure mid-session, so the deck re-fetched
+            // the same photos from the publisher's CDN over and over. We ask
+            // publishers to host these images for us; re-downloading one we
+            // already had is both slow for the reader and rude to the source.
+            //
+            // The fade stays identical: fadeInDuration/placeholder reproduce
+            // what frameBuilder was doing, and errors still collapse to the
+            // category gradient underneath rather than showing a broken glyph.
+            CachedNetworkImage(
+              imageUrl: article.imageUrl,
               fit: BoxFit.cover,
-              gaplessPlayback: true,
-              frameBuilder: (context, child, frame, syncLoaded) => syncLoaded
-                  ? child
-                  : AnimatedOpacity(
-                      opacity: frame == null ? 0 : 1,
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOut,
-                      child: child,
-                    ),
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              fadeInDuration: const Duration(milliseconds: 250),
+              fadeInCurve: Curves.easeOut,
+              placeholderFadeInDuration: Duration.zero,
+              placeholder: (_, __) => const SizedBox.shrink(),
+              errorWidget: (_, __, ___) => const SizedBox.shrink(),
             ),
           if (showCredit)
             Align(

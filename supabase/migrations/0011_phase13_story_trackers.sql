@@ -404,6 +404,11 @@ select vault.create_secret(
   'https://sbykpnhswupezuetpzhl.supabase.co/functions/v1/match-trackers',
   'match_trackers_fn_url');
 select vault.create_secret(
+  -- PLACEHOLDER, NOT A VALUE (Phase 19). The literal that used to sit here was
+  -- a live secret committed to a public repo; it has been rotated and purged
+  -- from history. Applying this migration verbatim installs a placeholder that
+  -- will not authenticate, which is the intended failure mode — see migration
+  -- 0026 for how to supply real values.
   '__MATCH_SECRET__',
   'match_trackers_fn_secret');
 

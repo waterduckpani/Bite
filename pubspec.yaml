@@ -19,6 +19,15 @@ dependencies:
   url_launcher: ^6.3.2
   supabase_flutter: ^2.15.4
   sign_in_with_apple: ^8.1.0
+  # Cover art is fetched straight from publisher CDNs. Image.network caches in
+  # memory only, so every relaunch — and every card that fell out of the memory
+  # cache — re-downloaded the same photo from the publisher. Disk caching is
+  # both a performance fix and basic courtesy to a source we are asking to host
+  # our images for free.
+  cached_network_image: ^3.4.1
+  # Appearance preference, stored locally so it survives a relaunch and works
+  # for guests with no account and no network.
+  shared_preferences: ^2.3.3
   crypto: ^3.0.7
   uuid: ^4.5.3
 

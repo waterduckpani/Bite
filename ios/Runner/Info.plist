@@ -24,6 +24,13 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Export compliance. Bite uses only HTTPS/TLS through the OS networking
+	     stack and Supabase's SDK; it implements no cryptography of its own and
+	     ships no encryption beyond what Apple's own frameworks provide, which
+	     is exempt. Declaring it here answers the question once instead of
+	     being prompted on every single upload to App Store Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -53,18 +60,15 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<!-- Portrait only. Every screen in Bite is a full-bleed card deck sized to
+	     a phone held upright, and the swipe gestures are calibrated to that;
+	     landscape was inherited from the Flutter template and had never been
+	     designed for, so it offered reviewers a broken layout to find. The
+	     ~ipad variant is gone with iPad support itself — see
+	     TARGETED_DEVICE_FAMILY in project.pbxproj. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>

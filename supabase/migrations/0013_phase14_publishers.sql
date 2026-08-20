@@ -732,6 +732,11 @@ select vault.create_secret(
 select vault.create_secret(
   -- Must equal INGEST_RSS_SECRET in the function's env. Distinct from the
   -- ingest/summarize/body secrets so it unlocks only RSS ingestion.
+  -- PLACEHOLDER, NOT A VALUE (Phase 19). The literal that used to sit here was
+  -- a live secret committed to a public repo; it has been rotated and purged
+  -- from history. Applying this migration verbatim installs a placeholder that
+  -- will not authenticate, which is the intended failure mode — see migration
+  -- 0026 for how to supply real values.
   '__INGEST_RSS_SECRET__',
   'ingest_rss_fn_secret');
 

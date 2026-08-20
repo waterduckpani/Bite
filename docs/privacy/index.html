@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bite · Privacy Policy</title>
+<meta name="description" content="What Bite collects, why, where it is stored, and how to get it deleted.">
+<style>
+  :root {
+    color-scheme: light dark;
+    --paper: #fbfaf7;
+    --ink: #1c1c1a;
+    --muted: #6b6a64;
+    --accent: #5f7a5f;
+    --border: #e4e1da;
+    --card: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131412;
+      --ink: #eceae4;
+      --muted: #9b9a92;
+      --accent: #9fb89f;
+      --border: #2a2b28;
+      --card: #1b1c1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3rem 1.25rem 5rem;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.1rem; margin: 2.4rem 0 .6rem; letter-spacing: -.01em; }
+  .lede { color: var(--muted); margin: 0 0 2rem; font-size: 1.05rem; }
+  code, .ua {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .875rem;
+  }
+  .ua {
+    display: block;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+    white-space: pre;
+    margin: .5rem 0 0;
+  }
+  ul { padding-left: 1.15rem; }
+  li { margin: .4rem 0; }
+  .callout {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin: 1rem 0 0;
+  }
+  a { color: var(--accent); }
+  footer {
+    margin-top: 3rem; padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .875rem;
+  }
+</style>
+<style>
+  table { border-collapse: collapse; width: 100%; margin: .75rem 0 0; font-size: .93rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+  .wrap { overflow-x: auto; }
+  h3 { font-size: .98rem; margin: 1.4rem 0 .3rem; }
+  .meta { color: var(--muted); font-size: .875rem; margin: 0 0 2rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Privacy Policy</h1>
+<p class="lede">
+  Bite is a news reader. It shows you short summaries of news stories and sends
+  you to the publisher to read them. This page explains exactly what it stores
+  about you, why, and how to make it stop.
+</p>
+<p class="meta">Last updated 20 August 2026 · Applies to the Bite iOS app.</p>
+
+<div class="callout">
+  <p style="margin:0 0 .6rem"><strong>The short version.</strong></p>
+  <p style="margin:0">
+    Bite has no advertising, no analytics SDK, and no trackers. It does not sell
+    or share your data with anyone, and it never links what you do in Bite to
+    what you do anywhere else. You can use it without giving an email address.
+    Everything it stores about you exists to rank your feed, and you can delete
+    all of it from inside the app in two taps.
+  </p>
+</div>
+
+<h2>Who is responsible</h2>
+<p>
+  Bite is an independent personal project, not a company. The data controller
+  (and, for the purposes of India's Digital Personal Data Protection Act 2023,
+  the Data Fiduciary and the grievance contact) is:
+</p>
+<p>
+  <strong>Bharat Khanna</strong><br>
+  <a href="mailto:bitenewsapp@gmail.com">bitenewsapp@gmail.com</a>
+</p>
+<p>
+  Bite is not a Significant Data Fiduciary and does not carry out any profiling
+  outside the app's own recommendation feature described below.
+</p>
+
+<h2>What Bite stores, and why</h2>
+<div class="wrap">
+<table>
+  <tr><th>Data</th><th>When</th><th>Why</th></tr>
+  <tr>
+    <td><strong>An anonymous account ID</strong></td>
+    <td>On first launch, always — including if you continue as a guest.</td>
+    <td>It is what your saves and swipes belong to, and what the database uses
+      to make sure you can only ever read your own. It is a random identifier;
+      it is not derived from your device, your phone number, or you.</td>
+  </tr>
+  <tr>
+    <td><strong>Your email address</strong></td>
+    <td>Only if you choose to create an account. Guests never provide one.</td>
+    <td>To sign you in with a one-time code, and to let your saves follow you
+      to a new phone. There is no password. It is never used for marketing —
+      Bite sends no email other than your sign-in codes.</td>
+  </tr>
+  <tr>
+    <td><strong>Your topics and region</strong></td>
+    <td>When you pick them in onboarding or Profile.</td>
+    <td>To shape your feed. <strong>Region is a preference you choose from a
+      list, not your location.</strong> Bite requests no location permission
+      and cannot read your position.</td>
+  </tr>
+  <tr>
+    <td><strong>Your swipes, saves and opens</strong></td>
+    <td>Every time you swipe or open a card.</td>
+    <td>This is the recommendation engine. Bite averages the stories you read
+      and save into a taste model and ranks your feed against it. This is the
+      one genuinely revealing thing Bite holds — a record of what news you
+      chose to read — and it is stored under your account ID and readable by
+      nobody else.</td>
+  </tr>
+  <tr>
+    <td><strong>Stories you follow</strong></td>
+    <td>When you tap the bell on a story.</td>
+    <td>To collect later coverage of that story into its timeline.</td>
+  </tr>
+  <tr>
+    <td><strong>Impressions and click-throughs</strong></td>
+    <td>When a card is shown to you, and when you tap through to a publisher.</td>
+    <td>So Bite can tell publishers how many readers it sent them. Reported to
+      them only as totals — a publisher is told "1,240 impressions, 96
+      click-throughs, 41 readers", never who.</td>
+  </tr>
+  <tr>
+    <td><strong>Your appearance choice</strong></td>
+    <td>If you change it in Profile.</td>
+    <td>Stored on your device only. It never leaves your phone.</td>
+  </tr>
+</table>
+</div>
+
+<h3>What Bite does not collect</h3>
+<ul>
+  <li>No location. No advertising identifier (IDFA). No contacts, photos,
+    calendar, microphone or camera.</li>
+  <li>No device fingerprint, and no third-party analytics or crash-reporting
+    SDK — there is no Firebase, no Google Analytics, no Meta SDK, no
+    attribution SDK in the app.</li>
+  <li>No cross-app or cross-site tracking of any kind. Under Apple's
+    definition, Bite does not track, and it does not ask for permission to,
+    because it has nothing to ask for.</li>
+</ul>
+
+<h2>Where it is stored</h2>
+<p>
+  Bite's backend runs on <strong>Supabase</strong> (Postgres), hosted in
+  <strong>Sydney, Australia</strong> (<code>ap-southeast-2</code>). If you are
+  in India, the EU/EEA, the UK, or anywhere else, your data is transferred to
+  and stored in Australia. Transfers are protected by Supabase's data
+  processing terms and standard contractual clauses; Australia is not the
+  subject of an EU adequacy decision, and that is disclosed here rather than
+  left to be discovered.
+</p>
+<p>Everything is transmitted over TLS, and every table enforces row-level
+  security so one reader's rows cannot be read by another.</p>
+
+<h2>Who else sees anything</h2>
+<ul>
+  <li><strong>Supabase</strong> — hosting, database and authentication. A
+    processor acting on instructions; it does not use your data for itself.</li>
+  <li><strong>OpenRouter</strong> — writes the short summaries. It is sent
+    <em>news article text only</em>. No account ID, no email, and nothing about
+    any reader is ever sent to it. Summaries are generated once for everybody,
+    not per reader.</li>
+  <li><strong>Publishers</strong> — when you tap a story you go to their
+    website, inside an in-app browser. From that moment you are on their site
+    and their privacy policy applies, including any cookies or trackers they
+    use. Bite does not tell them who you are, but it cannot control what their
+    page does once it loads.</li>
+  <li><strong>Apple</strong> — distributes the app and handles purchases (there
+    are none). Apple's own privacy policy applies to the App Store.</li>
+</ul>
+<p><strong>Nothing is sold, and nothing is shared for advertising.</strong>
+  Bite carries no advertising and has no revenue.</p>
+
+<h2>How long it is kept</h2>
+<ul>
+  <li><strong>Your account and everything under it</strong> — until you delete
+    it. There is no automatic expiry, because your reading history is what
+    makes your feed good.</li>
+  <li><strong>Article text fetched for summarising</strong> — deleted as soon
+    as the summary is written, and in any case within 48 hours.</li>
+  <li><strong>Impression and click-through records</strong> — kept for
+    publisher reporting. When you delete your account these are
+    <strong>anonymised, not deleted</strong>: the link to your account is
+    removed, leaving a count with nothing identifying attached. This is the one
+    exception to deletion and it is stated here deliberately.</li>
+</ul>
+
+<h2>Deleting your data</h2>
+<div class="callout">
+  <p style="margin:0 0 .6rem"><strong>In the app: Profile → Delete account.</strong></p>
+  <p style="margin:0">
+    This permanently removes your account, your saved stories, your entire
+    reading history and the taste model built from it, your topics and region,
+    and every story you follow. It happens immediately and cannot be undone.
+    No email, no form, no waiting.
+  </p>
+</div>
+<p>
+  Signing out is different and does not delete anything — it leaves your data
+  with the account so you can sign back in.
+</p>
+
+<h2>Your rights</h2>
+<p>
+  Bite grants the following to <strong>every reader, wherever you live</strong>.
+  Rather than giving EU readers one set of rights and everyone else another,
+  the stronger set is applied to everybody:
+</p>
+<ul>
+  <li><strong>Access</strong> — a copy of everything held about you.</li>
+  <li><strong>Correction</strong> — fix anything inaccurate.</li>
+  <li><strong>Erasure</strong> — delete it all (in-app, as above).</li>
+  <li><strong>Portability</strong> — your data in a machine-readable file.</li>
+  <li><strong>Restriction and objection</strong> — including objecting to the
+    recommendation ranking; ask and your taste model will be cleared.</li>
+  <li><strong>Withdraw consent</strong> at any time, without affecting what was
+    done before you withdrew it.</li>
+  <li><strong>Nominate</strong> someone to exercise these rights on your behalf
+    in the event of death or incapacity (DPDP Act s.14).</li>
+</ul>
+<p>
+  Email <a href="mailto:bitenewsapp@gmail.com">bitenewsapp@gmail.com</a> and
+  you will get an answer within 30 days. If you are unhappy with the response
+  you can complain to the <strong>Data Protection Board of India</strong>, or
+  to your local supervisory authority if you are in the EU/EEA or the UK.
+</p>
+
+<h3>Legal bases (EU/EEA and UK readers)</h3>
+<ul>
+  <li><strong>Contract</strong> — your account, saves, and trackers: without
+    these the app cannot do what you asked it to.</li>
+  <li><strong>Legitimate interests</strong> — the recommendation ranking and
+    aggregate publisher reporting, balanced against the fact that the data
+    stays inside Bite, is never sold, is never combined with outside sources,
+    and can be erased on demand.</li>
+  <li><strong>Consent</strong> — where you have given it, withdrawable at any
+    time.</li>
+</ul>
+
+<h2>Children</h2>
+<p>
+  Bite is rated 17+ and is not intended for children. It shows unfiltered news
+  and opens publisher websites in a browser. Bite does not knowingly collect
+  data from anyone under 18, and does not carry out behavioural monitoring or
+  targeted advertising directed at children — it carries no advertising at all.
+  If you believe a child has created an account, email us and it will be
+  deleted.
+</p>
+
+<h2>Changes</h2>
+<p>
+  If this policy changes materially you will be told in the app before the
+  change takes effect. The date at the top always reflects the current version.
+</p>
+
+<h2>Contact</h2>
+<p>
+  <a href="mailto:bitenewsapp@gmail.com">bitenewsapp@gmail.com</a> — for
+  privacy questions, any of the rights above, or a grievance under the DPDP
+  Act.
+</p>
+
+<footer>
+  Bite is an independent, non-commercial personal project. It carries no
+  advertising and sells nothing. ·
+  <a href="../terms/">Terms of Use</a> ·
+  <a href="../bot/">BiteNewsBot</a>
+</footer>
+
+</main>
+</body>
+</html>

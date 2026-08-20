@@ -1,12 +1,20 @@
 .env
 # Edge Function secrets (pushed with `supabase secrets set --env-file`)
 supabase/functions/.env.secrets
+# Generated one-shot rotation scripts. These hold live vault values by design;
+# the tracked counterpart is migration 0026, which holds the procedure only.
+supabase/rotate_secrets.local.sql
+supabase/*.local.sql
 # Supabase CLI local link state
 supabase/.temp/
-# NOTE: migrations are tracked as of Phase 18, by explicit choice. They embed
-# deployed vault secret values in plaintext (0002, 0003, 0005, 0011, 0013), and
-# this repo is public — rotate those secrets rather than relying on them being
-# unlisted here.
+# NOTE: migrations are tracked as of Phase 18, by explicit choice. Until Phase
+# 19 they also embedded live vault secret values in plaintext (0002, 0003,
+# 0005, 0011, 0013) on a public repo. Those five secrets have now been rotated
+# and the literals removed from the working tree AND from git history; the
+# migrations carry __PLACEHOLDER__ tokens and migration 0026 documents the
+# procedure. A migration must never again contain a secret value — if one needs
+# rotating, generate a *.local.sql (ignored above) and keep the tracked file
+# describing the mechanism only.
 
 # Flutter/Dart
 .dart_tool/

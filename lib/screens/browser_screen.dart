@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -313,12 +314,15 @@ class _Favicon extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
-      child: Image.network(
-        url,
+      // Disk-cached like the cover art: a publisher's favicon is the same 24px
+      // image on every one of their stories, so it should be fetched once, not
+      // once per article opened.
+      child: CachedNetworkImage(
+        imageUrl: url,
         width: 24,
         height: 24,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => lettermark,
+        errorWidget: (_, __, ___) => lettermark,
       ),
     );
   }

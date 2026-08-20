@@ -209,8 +209,11 @@ class _SignInSheetState extends State<SignInSheet> {
           label: const Text('Continue with email'),
         ),
       ),
-      const SizedBox(height: 10),
-      _AppleButton(bite: bite, onSignedIn: _onAppleSignedIn),
+      // Present only when it can complete. See _AppleButton.
+      if (AppConfig.appleSignInEnabled) ...[
+        const SizedBox(height: 10),
+        _AppleButton(bite: bite, onSignedIn: _onAppleSignedIn),
+      ],
       const SizedBox(height: 12),
       Center(
         child: Text(
@@ -369,8 +372,19 @@ class _SignInSheetState extends State<SignInSheet> {
   }
 }
 
-/// The native Apple button, rendered but inert ("coming soon") while
-/// [AppConfig.appleSignInEnabled] is off.
+/// The native Apple button. Only ever built when [AppConfig.appleSignInEnabled]
+/// is on — callers gate on the flag rather than this widget rendering itself
+/// disabled.
+///
+/// It used to render inert, labelled "Apple (coming soon)". That was honest,
+/// and it was still the wrong call for a shipping build: App Store Review
+/// guideline 2.1 (App Completeness) treats placeholder and non-functional UI
+/// as an incomplete app, and "coming soon" on the front door is the clearest
+/// possible example. Everything behind this button — the flow, the token
+/// exchange, the guest-account linking — is written and stays written; the
+/// flag turns the whole option on the day the Developer Program and Supabase
+/// provider setup are done. Until then readers see two paths that both work
+/// rather than three of which one is scenery.
 class _AppleButton extends StatelessWidget {
   const _AppleButton({required this.bite, required this.onSignedIn});
 
@@ -379,19 +393,17 @@ class _AppleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const enabled = AppConfig.appleSignInEnabled;
-    final button = FilledButton.icon(
-      style: FilledButton.styleFrom(
-        backgroundColor: bite.ink,
-        foregroundColor: bite.paper,
-        disabledBackgroundColor: bite.ink.withValues(alpha: 0.35),
-        disabledForegroundColor: bite.paper.withValues(alpha: 0.85),
+    return Pressable(
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: bite.ink,
+          foregroundColor: bite.paper,
+        ),
+        onPressed: () => _signIn(context),
+        icon: const Icon(Icons.apple, size: 22),
+        label: const Text('Continue with Apple'),
       ),
-      onPressed: enabled ? () => _signIn(context) : null,
-      icon: const Icon(Icons.apple, size: 22),
-      label: Text(enabled ? 'Continue with Apple' : 'Apple (coming soon)'),
     );
-    return enabled ? Pressable(child: button) : button;
   }
 
   Future<void> _signIn(BuildContext context) async {

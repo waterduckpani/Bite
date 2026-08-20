@@ -643,7 +643,13 @@ function readableText(html: string): string {
 
 Deno.serve(async (req) => {
   const secret = Deno.env.get("INGEST_RSS_SECRET");
-  if (secret && req.headers.get("x-ingest-rss-secret") !== secret) {
+  // FAIL CLOSED (Phase 19). This was `if (secret && ...)`, which meant an
+  // absent INGEST_RSS_SECRET did not fail the check — it REMOVED it. Combined with
+  // --no-verify-jwt that made the function completely open to the internet,
+  // and the trigger for it was a botched or half-finished secret rotation:
+  // exactly the moment you most want the door shut. A missing secret is now a
+  // misconfiguration and is refused like a wrong one.
+  if (!secret || req.headers.get("x-ingest-rss-secret") !== secret) {
     return new Response("forbidden", { status: 403 });
   }
 

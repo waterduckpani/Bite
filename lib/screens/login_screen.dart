@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../config/app_config.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable.dart';
@@ -21,9 +22,10 @@ import '../widgets/sign_in_sheet.dart';
 /// already-registered fallback all live in that sheet and in
 /// `UserDataRepository.sendEmailOtp`.
 ///
-/// Apple stays rendered-but-inert: it is waiting on a Developer Program
-/// membership (see `AppConfig.appleSignInEnabled`), and a button that opens a
-/// flow which cannot finish is worse than one that admits it isn't ready.
+/// Apple is hidden entirely rather than shown switched off: it is waiting on a
+/// Developer Program membership (see `AppConfig.appleSignInEnabled`), and App
+/// Store Review guideline 2.1 counts a visible "coming soon" control as an
+/// incomplete app. The flow behind it is finished and stays in the build.
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -85,11 +87,14 @@ class LoginScreen extends StatelessWidget {
                   style: sans(size: 12, color: bite.faint),
                 ),
               ),
-              const SizedBox(height: 18),
-              const _InactiveOption(
-                icon: Icons.apple,
-                label: 'Continue with Apple',
-              ),
+              // Apple appears here the day AppConfig.appleSignInEnabled goes
+              // on, and not before — a front door that shows a door you cannot
+              // open is the App Completeness rejection (guideline 2.1) waiting
+              // to happen. See _AppleButton in sign_in_sheet.dart.
+              if (AppConfig.appleSignInEnabled) ...[
+                const SizedBox(height: 18),
+                const _AppleOption(),
+              ],
               const SizedBox(height: 26),
               Row(
                 children: [
@@ -186,50 +191,49 @@ class _GuestButton extends StatelessWidget {
   }
 }
 
-/// An account option that is visibly present and honestly switched off: full
-/// button shape, muted fill, a "soon" tag, and no tap target at all.
-class _InactiveOption extends StatelessWidget {
-  const _InactiveOption({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
+/// The Apple path on the front door, shown only when it can complete.
+///
+/// This replaced an `_InactiveOption` that rendered a full-width button
+/// labelled "Apple · SOON" with no tap target. The intent was honesty, and as
+/// a portfolio screen it read well — but App Store Review guideline 2.1 treats
+/// visible placeholder controls as an incomplete app, and this one sat on the
+/// first screen a reviewer would ever see. The flow behind it is complete and
+/// untouched; only its visibility is gated.
+class _AppleOption extends StatelessWidget {
+  const _AppleOption();
 
   @override
   Widget build(BuildContext context) {
     final bite = context.bite;
     return Semantics(
       button: true,
-      enabled: false,
-      label: '$label, coming soon',
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        decoration: BoxDecoration(
-          color: bite.card,
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: bite.border, width: 0.75),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 19, color: bite.faint),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: sans(
-                    size: 15, weight: FontWeight.w500, color: bite.faint),
+      child: Pressable(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          showSignInSheet(context);
+        },
+        haptic: false,
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: bite.card,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: bite.border, width: 0.75),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.apple, size: 19, color: bite.ink),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Continue with Apple',
+                  style:
+                      sans(size: 15, weight: FontWeight.w600, color: bite.ink),
+                ),
               ),
-            ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: bite.muted.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text('SOON', style: caps(size: 8.5, color: bite.muted)),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
