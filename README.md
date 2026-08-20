@@ -262,8 +262,11 @@ docs/
 test/             widget/flow tests
 ```
 
-> Database migrations are kept local (they embed deployed vault-secret values)
-> and are intentionally not committed.
+> Database migrations are tracked as of Phase 18. They contain **no secret
+> values**: where one is required, the file carries a `__PLACEHOLDER__` token
+> and the real value is supplied from a gitignored `supabase/*.local.sql`.
+> Migration 0026 documents the rotation procedure and the incident that
+> produced the rule.
 
 ---
 
@@ -360,9 +363,24 @@ select * from public.ai_usage_daily order by day desc limit 14;
 Bite is a personal project built in phases — design system and motion, live
 content, Supabase persistence, authentication, a pgvector recommendation
 engine, server-side ingestion, AI summaries, the four-gesture swipe rework,
-story trackers, publisher-direct ingestion with click-through reporting, and
-the bite moving onto the card face. It is a functional, end-to-end iOS app, not
-a shipped App Store product.
+story trackers, publisher-direct ingestion with click-through reporting, the
+bite moving onto the card face, and a compliance pass covering in-app account
+deletion, a published privacy policy and terms, and an iOS privacy manifest.
+
+It is a functional, end-to-end iOS app. It is not yet a shipped App Store
+product: what remains is listed, honestly and in order, in
+[`docs/appstore/submission-checklist.md`](docs/appstore/submission-checklist.md).
+
+---
+
+## Policies
+
+- [Privacy Policy](https://waterduckpani.github.io/Bite/privacy/) — what is
+  stored, where (Sydney), and how to delete it from inside the app.
+- [Terms of Use](https://waterduckpani.github.io/Bite/terms/) — including the
+  publisher takedown route.
+- [BiteNewsBot](https://waterduckpani.github.io/Bite/bot/) — the crawler's
+  published policy, and how to block or remove your site.
 
 ---
 
