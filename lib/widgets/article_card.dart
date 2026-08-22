@@ -301,7 +301,7 @@ class _FollowingBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.notifications_active, size: 12, color: bite.onAccent),
+          Icon(Icons.bookmark_added, size: 12, color: bite.onAccent),
           const SizedBox(width: 4),
           Text('Following', style: caps(size: 9, color: bite.onAccent)),
         ],

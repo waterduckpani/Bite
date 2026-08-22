@@ -165,7 +165,9 @@ class _TrackerRow extends StatelessWidget {
                   if (tracker.muted) ...[
                     Padding(
                       padding: const EdgeInsets.only(top: 3),
-                      child: Icon(Icons.notifications_off,
+                      // Paused, not muted — this tracker has stopped
+                      // collecting. Bite sends no alerts to mute.
+                      child: Icon(Icons.pause_circle_outline,
                           size: 15, color: bite.faint),
                     ),
                     const SizedBox(width: 6),

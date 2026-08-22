@@ -104,7 +104,9 @@ void main() {
 
     // The track step teaches the real follow control with a sandboxed handler.
     expect(find.text('Follow a developing story'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.notifications_none));
+    // Bookmark, not bell: Bite sends no notifications, so the follow control
+    // must not look like a subscription. See FollowStoryButton.
+    await tester.tap(find.byIcon(Icons.bookmark_add_outlined));
     await tester.pumpAndSettle();
     expect(find.text('Following this story'), findsOneWidget);
     await settleStep(tester);

@@ -294,7 +294,7 @@ class _WalkthroughScreenState extends State<WalkthroughScreen> {
     setState(() => _practiceFollowing = true);
     _succeed(
       _Confirmation(
-          Icons.notifications_active, 'Following this story', context.bite.accent),
+          Icons.bookmark_added, 'Following this story', context.bite.accent),
       hold: const Duration(milliseconds: 1200),
     );
   }
@@ -691,10 +691,14 @@ class _WalkthroughScreenState extends State<WalkthroughScreen> {
                   detail: 'Save it for later.',
                 ),
                 _RecapRow(
-                  icon: Icons.notifications_none,
+                  icon: Icons.bookmark_add_outlined,
                   badge: Icons.track_changes,
                   color: bite.accent,
-                  title: 'Tap the bell',
+                  // Not "tap the bell": there is no bell, because there are no
+                  // notifications. Following collects coverage into a timeline
+                  // you come back to, and the copy should promise exactly that
+                  // and nothing more.
+                  title: 'Tap follow',
                   detail: 'Follow a story and collect what comes next.',
                 ),
                 const SizedBox(height: 20),
@@ -1012,7 +1016,7 @@ class _TourPanel extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(Icons.notifications_active, size: 18, color: bite.accent),
+              Icon(Icons.bookmark_added, size: 18, color: bite.accent),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(

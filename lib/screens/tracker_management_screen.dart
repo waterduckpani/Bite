@@ -103,11 +103,22 @@ class _ManageRow extends StatelessWidget {
                 onTap: () => _rename(context, state),
               ),
               const SizedBox(width: 6),
+              // "Pause", not "Mute". This control stops the tracker COLLECTING
+              // new coverage (match-trackers skips muted rows, 0011:330) — it
+              // has nothing to do with alerts, and Bite sends none: the only
+              // signal a tracker produces is the unread badge on the Tracked
+              // tab, which you see when you open the app.
+              //
+              // It was previously a bell labelled Mute/Unmute, which promised
+              // a notification setting the app cannot honour and hid what the
+              // toggle really does. A reader muting to stop pings would have
+              // silently stopped receiving coverage instead, with no way to
+              // connect the quiet timeline to the button they pressed.
               _Action(
                 icon: tracker.muted
-                    ? Icons.notifications_active_outlined
-                    : Icons.notifications_off_outlined,
-                label: tracker.muted ? 'Unmute' : 'Mute',
+                    ? Icons.play_arrow_outlined
+                    : Icons.pause_outlined,
+                label: tracker.muted ? 'Resume' : 'Pause',
                 onTap: () {
                   HapticFeedback.selectionClick();
                   state.setTrackerMuted(tracker.id, !tracker.muted);

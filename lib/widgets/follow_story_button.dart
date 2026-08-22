@@ -128,8 +128,12 @@ class FollowGlyph extends StatelessWidget {
           child: Semantics(
             button: true,
             label: following ? 'Stop following this story' : 'Follow this story',
+            // A bookmark, not a bell. Following a story adds it to a timeline
+            // you come back to; it does not subscribe you to anything, because
+            // Bite sends no notifications. The bell was the wrong metaphor for
+            // the one gesture most likely to be read as "alert me".
             child: Icon(
-              following ? Icons.notifications_active : Icons.notifications_none,
+              following ? Icons.bookmark_added : Icons.bookmark_add_outlined,
               size: 20,
               color: following ? bite.onAccent : bite.ink,
             ),

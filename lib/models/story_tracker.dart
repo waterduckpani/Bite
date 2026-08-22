@@ -34,7 +34,14 @@ class StoryTracker {
 
   final DateTime createdAt;
 
-  /// Muted trackers keep their history but stop matching new articles.
+  /// Paused trackers keep their history but stop matching new articles.
+  ///
+  /// The field keeps the name `muted` because that is the column name in
+  /// `story_trackers` and renaming it would be a migration for no behavioural
+  /// gain. The UI deliberately says "Pause"/"Resume" instead: "mute" describes
+  /// silencing an alert, and Bite has no alerts to silence — this flag stops
+  /// the tracker COLLECTING. Where the two disagree, the label is the honest
+  /// one and this comment is the bridge.
   final bool muted;
 
   /// Total matched articles, including the seed.

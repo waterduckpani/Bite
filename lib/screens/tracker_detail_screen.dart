@@ -78,9 +78,11 @@ class _TrackerDetailScreenState extends State<TrackerDetailScreen> {
                   ),
                   // The same toggle the reader has: whatever turned following
                   // on turns it off, wherever the reader happens to be.
+                  // A filled bookmark, not a bell. This unfollows the story;
+                  // it never controlled alerts, and Bite sends none.
                   IconButton(
                     tooltip: 'Stop following',
-                    icon: Icon(Icons.notifications_active, color: bite.accent),
+                    icon: Icon(Icons.bookmark_added, color: bite.accent),
                     onPressed: () => _confirmUnfollow(context),
                   ),
                 ],
