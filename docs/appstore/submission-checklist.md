@@ -20,20 +20,50 @@ unticked ones need an account, a device, or a human decision.
 - [x] **Guest path** — the app is fully usable without an account, so the
       forced-registration half of 5.1.1(v) does not apply.
 
-## Needs your account or a device
+## Blocked on the Apple Developer Program
 
-- [ ] **Paid Apple Developer Program membership.** `DEVELOPMENT_TEAM =
-      YSY2WW4RRP` is set but `AppConfig` still lists "join the Program" as step
-      one — confirm it is a paid team, not a personal one.
-- [ ] **Rotate the leaked Edge Function secrets** — see migration 0026. Until
-      this is done the old secrets remain valid on the live project.
-- [ ] **Apply migrations 0025 and 0027** (re-queue summaries; account deletion).
-- [ ] **Verify deletion end-to-end on TestFlight** with a throwaway account,
-      using the verification block at the foot of migration 0027. This is the
-      one compliance path with no automated test behind it.
+Confirmed **not a paid team**. `DEVELOPMENT_TEAM = YSY2WW4RRP` is a personal
+team, which builds and runs on your own device and nothing more. Everything
+below is gated on enrolment, so this is the critical path:
+
+- [ ] **Enrol in the Apple Developer Program** — $99/year, at
+      [developer.apple.com/programs](https://developer.apple.com/programs/).
+      Individual enrolment is usually approved in 24-48h; if you enrol as an
+      organisation it needs a D-U-N-S number and takes materially longer.
+      Individual is the right choice here — the app ships under your own name.
+
+Gated on it, and impossible before it:
+
+- [ ] App Store Connect record (cannot be created without membership)
+- [ ] TestFlight (needs a distribution certificate)
+- [ ] Push notifications, if ever added (needs an APNs key)
+- [ ] **Sign in with Apple** — the code is written and dormant behind
+      `AppConfig.appleSignInEnabled`; the capability needs a paid team. Not
+      required by guideline 4.8, so it stays off until you want it.
+
+Nothing else in this repo is waiting on it: the app builds, the backend runs,
+and every compliance item below is either done or a SQL statement away.
+
+## Needs your Supabase project
+
+- [ ] **Rotate the leaked Edge Function secrets** — see migration 0026.
+      Verified still outstanding as of 22 Aug: the deployed digests still match
+      the old committed values, so **the leaked secrets are still live**. This
+      is the single highest-priority item on this page and it does not depend
+      on Apple.
+- [x] **Migration 0025** (re-queue stranded summaries) — applied 22 Aug.
+      `failed` went 741 -> 0.
+- [x] **Migration 0027** (account deletion RPC) — applied 22 Aug.
+- [ ] **Migration 0028** (budget counts completions) — needed to actually drain
+      the 601-row backlog 0025 re-queued; the worker is already deployed and
+      waiting for it.
+- [ ] **Verify deletion end-to-end** with a throwaway account, using the
+      verification block at the foot of migration 0027. This is the one
+      compliance path with no automated test behind it. Does not need
+      TestFlight — a simulator build against the live project is enough.
 - [ ] **App Store Connect record**: name, subtitle, keywords, description,
       support URL, 17+ age rating, App Privacy answers (use
-      [app-privacy.md](app-privacy.md)).
+      [app-privacy.md](app-privacy.md)). *Requires membership.*
 - [ ] **Screenshots** — 6.9" and 6.5" are required.
 - [ ] **Version + build number** — pubspec is `0.1.0`; ship as `1.0.0+1`.
 - [ ] **Archive, upload, TestFlight pass on a physical device, submit.**
