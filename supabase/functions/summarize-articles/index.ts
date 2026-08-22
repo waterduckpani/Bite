@@ -384,10 +384,15 @@ Deno.serve(async (req) => {
   }
   const candidates = (rows ?? []) as Candidate[];
 
-  // -- Part D3: claim budget BEFORE spending anything -----------------------
-  // The cap is global and the claim is atomic, so overlapping runs cannot both
-  // spend the day's last slots. When the day is spent we stop and log — the
-  // overflow is NOT queued, it is simply not summarised today.
+  // -- Daily budget --------------------------------------------------------
+  // ASK how much room is left today; do not reserve it (migration 0028).
+  //
+  // This used to reserve the batch up front, which made double-spending by two
+  // overlapping runs impossible. It also meant a run that did not reach its
+  // refund line burned those slots until UTC midnight, with nothing able to
+  // reconcile them — and since every run reserved a full batch whenever a
+  // backlog existed, the counter raced the ceiling and wedged the pipeline
+  // shut exactly when there was most to do. See 0028 for the full trade.
   let granted = 0;
   if (candidates.length > 0) {
     const { data: claimed, error: claimError } = await supabase.rpc(
@@ -401,8 +406,9 @@ Deno.serve(async (req) => {
   }
   if (granted === 0) {
     console.log(
-      `summarize halted: DAILY_SUMMARY_CAP=${DAILY_SUMMARY_CAP} reached` +
-        ` (${candidates.length} rows waiting, not queued)`,
+      `summarize halted: DAILY_SUMMARY_CAP=${DAILY_SUMMARY_CAP} of actual` +
+        ` summaries written today (${candidates.length} rows waiting,` +
+        ` not queued)`,
     );
     return Response.json({
       selected: 0,
@@ -412,8 +418,6 @@ Deno.serve(async (req) => {
   }
 
   const batch = candidates.slice(0, granted);
-  // Slots claimed for rows we then declined to take back.
-  let unusedSlots = granted - batch.length;
 
   // Claim the batch as pending so an overlapping run doesn't double-summarise.
   // A row left pending by a crash is re-selected next run (attempts untouched).
@@ -464,7 +468,6 @@ Deno.serve(async (req) => {
         .update({ ai_summary_status: "skipped" })
         .eq("id", row.id);
       skipped++;
-      unusedSlots++; // never reached the model, so it never spent its slot
       console.log(`summarize skip id=${row.id} reason="${reason}"`);
     };
 
@@ -472,7 +475,7 @@ Deno.serve(async (req) => {
     // the cap — then park it as failed. Reserved for transient causes: model
     // errors, unparseable output, database writes. Anything determined by the
     // row's own fixed content belongs in markIneligible above.
-    const markFailure = async (reason: string, refundSlot: boolean) => {
+    const markFailure = async (reason: string) => {
       const next = attempts + 1;
       await supabase
         .from("articles")
@@ -483,8 +486,6 @@ Deno.serve(async (req) => {
         .eq("id", row.id);
       if (next >= MAX_ATTEMPTS) failed++;
       else skipped++;
-      // A row that never reached the model didn't spend its slot.
-      if (refundSlot) unusedSlots++;
       console.log(
         `summarize drop id=${row.id} attempt=${next}/${MAX_ATTEMPTS} reason="${reason}"`,
       );
@@ -535,14 +536,14 @@ Deno.serve(async (req) => {
         })
         .eq("id", row.id);
       if (writeError) {
-        await markFailure(`db write: ${writeError.message}`, false);
+        await markFailure(`db write: ${writeError.message}`);
         return;
       }
       byMode[mode]++;
       summarisedRssIds.push(row.id);
       done++;
     } catch (e) {
-      await markFailure(`${e}`, false);
+      await markFailure(`${e}`);
     }
   });
 
@@ -552,9 +553,11 @@ Deno.serve(async (req) => {
     await supabase.from("rss_bodies").delete().in("article_id", summarisedRssIds);
   }
 
-  // Hand back what we claimed but never spent, so the day's budget is honest.
-  if (unusedSlots > 0) {
-    await supabase.rpc("release_summary_slots", { p_n: unusedSlots });
+  // Record what was actually produced. This is the ONLY thing that moves the
+  // daily counter now, which is what makes the number in ai_usage_daily equal
+  // the number of bites a person would arrive at by counting them.
+  if (done > 0) {
+    await supabase.rpc("record_summaries_done", { p_n: done });
   }
   // Day-to-date spend, read back AFTER recording this run's tokens.
   //
