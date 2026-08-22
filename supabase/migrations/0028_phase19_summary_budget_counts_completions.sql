@@ -3,8 +3,55 @@
 -- Run in the SQL editor, then redeploy:
 --   supabase functions deploy summarize-articles --no-verify-jwt
 --
+-- ===========================================================================
+-- CORRECTION, WRITTEN AFTER THIS MIGRATION WAS APPLIED. READ THIS FIRST.
+--
+-- The diagnosis below — that leaked reservations had saturated the daily
+-- counter and were wedging the pipeline — IS WRONG. It is left in place rather
+-- than deleted, because a migration that quietly rewrites its own reasoning is
+-- worse than one that shows it.
+--
+-- The ledger, read straight after this ran, refutes it outright:
+--
+--   day          summaries_done      bites actually written that day
+--   2026-08-21   193                 192
+--   2026-08-20   172                 (same shape)
+--
+-- Against a 600 cap. If reservations had been leaking, summaries_done would
+-- have run far AHEAD of completions and pinned itself to 600. Instead it
+-- tracked completions to within one. Nothing leaked, the budget was never
+-- close to exhausted, and the early return on `granted === 0` was therefore
+-- never being taken. The mechanism described below was not occurring.
+--
+-- WHAT WAS ACTUALLY HAPPENING: nothing was wrong. Migration 0025 had been
+-- applied only minutes before the measurement that prompted this file. Before
+-- that moment the 741 stranded rows still carried status='failed' and were
+-- correctly excluded from selection — so between six-hourly ingests the queue
+-- was genuinely EMPTY, and the runs that "did nothing" were runs with nothing
+-- to do. The five-hour silences that looked like a stall were an idle worker
+-- behaving exactly as designed.
+--
+-- The error was reading a fresh backlog as a stuck one: 601 rows had been
+-- eligible for a few minutes, not two days, and had simply not had a tick yet.
+-- The very next tick after this file was applied wrote 25 of them, and the
+-- backlog began draining at 25/tick — which it would have done regardless.
+--
+-- WHY THIS MIGRATION IS KEPT ANYWAY, on its own merits rather than the false
+-- ones below: the reservation leak it removes is real but LATENT, not
+-- observed. A run that dies between claiming and refunding does burn those
+-- slots until UTC midnight, with nothing able to reconcile them. That has not
+-- happened here — runs finish in well under a minute against a limit measured
+-- in minutes — so this is defence against a failure that has never occurred,
+-- bought at the cost of the atomic guarantee described under THE TRADE.
+--
+-- That is a genuine trade and a close one. It was made here on a mistaken
+-- premise, and if the atomic reservation is worth more to you than crash
+-- tolerance, reverting to 0013's claim_summary_slots is correct and costs
+-- nothing but a redeploy.
+-- ===========================================================================
+--
 -- ---------------------------------------------------------------------------
--- THE SYMPTOM
+-- THE SYMPTOM (as diagnosed at the time — see the correction above)
 --
 -- Migration 0025 re-queued 696 stranded articles. Two days later 601 of them
 -- were still sitting at ai_summary_status = null with ai_summary_attempts = 0
