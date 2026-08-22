@@ -46,21 +46,23 @@ and every compliance item below is either done or a SQL statement away.
 
 ## Needs your Supabase project
 
-- [ ] **Rotate the leaked Edge Function secrets** — see migration 0026.
-      Verified still outstanding as of 22 Aug: the deployed digests still match
-      the old committed values, so **the leaked secrets are still live**. This
-      is the single highest-priority item on this page and it does not depend
-      on Apple.
+- [x] **Rotate the leaked Edge Function secrets** — done 22 Aug. Verified by
+      digest: all five deployed secrets now match the newly generated values,
+      and the pipeline kept running across the change, which independently
+      confirms the vault side and the function side agree. The committed
+      literals are dead.
 - [x] **Migration 0025** (re-queue stranded summaries) — applied 22 Aug.
       `failed` went 741 -> 0.
 - [x] **Migration 0027** (account deletion RPC) — applied 22 Aug.
-- [ ] **Migration 0028** (budget counts completions) — needed to actually drain
-      the 601-row backlog 0025 re-queued; the worker is already deployed and
-      waiting for it.
-- [ ] **Verify deletion end-to-end** with a throwaway account, using the
-      verification block at the foot of migration 0027. This is the one
-      compliance path with no automated test behind it. Does not need
-      TestFlight — a simulator build against the live project is enough.
+- [x] **Migration 0028** (budget counts completions) — applied 22 Aug. Note the
+      correction at the top of that file: it was written on a mistaken
+      diagnosis and is kept on narrower merits. The backlog drains at 25/tick
+      either way.
+- [x] **Verify deletion end-to-end** — done 22 Aug against the live project
+      with a throwaway anonymous account: user created, a save written
+      (1 row), `rpc/delete_account` returned 204, user afterwards 403, saves
+      afterwards 0. Worth repeating once from the actual UI on a real device
+      before submission, but the server contract is proven.
 - [ ] **App Store Connect record**: name, subtitle, keywords, description,
       support URL, 17+ age rating, App Privacy answers (use
       [app-privacy.md](app-privacy.md)). *Requires membership.*
