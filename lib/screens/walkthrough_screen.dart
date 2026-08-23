@@ -568,8 +568,14 @@ class _WalkthroughScreenState extends State<WalkthroughScreen> {
           ),
         _Step.openStory => (
             'Swipe up, or tap, to open it',
-            'The bite informs you, the publisher completes it. Every story '
-                'opens on their own page, and the card waits here for you.',
+            // Says who wrote the words on the card. The AI SUMMARY tag marks
+            // every bite, but a tag is a reminder for someone who already
+            // knows — this is the one moment in the app where the reader is
+            // being taught what they are looking at, so it is where the fact
+            // belongs in full.
+            'The summary on each card is written by AI from the publisher\'s '
+                'own feed, so it can get things wrong. It informs you; the '
+                'publisher completes it. Every story opens on their own page.',
           ),
         _Step.saveStory => (
             'Swipe down to save it',

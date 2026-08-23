@@ -5,6 +5,7 @@ import '../models/story_tracker.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pressable.dart';
+import '../widgets/ai_summary_tag.dart';
 import '../widgets/reader_cue.dart';
 import 'browser_screen.dart';
 import 'tracked_screen.dart' show TrackerStatsRow;
@@ -337,6 +338,13 @@ class _TimelineEntry extends StatelessWidget {
                     style: sans(size: 12, color: bite.faint),
                   ),
                 ),
+                // A tracker tile shows the same AI-written lead and body as a
+                // feed card, so it carries the same disclosure. Compact: this
+                // row already holds a publisher, a timestamp and the read cue.
+                if (hasSummary) ...[
+                  const SizedBox(width: 8),
+                  const AiSummaryTag(compact: true),
+                ],
                 const SizedBox(width: 8),
                 ReaderCue(article: article),
               ],

@@ -4,6 +4,7 @@ import '../models/article.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
+import 'ai_summary_tag.dart';
 import 'category_chip.dart';
 import 'cover_art.dart';
 import 'reader_cue.dart';
@@ -278,7 +279,20 @@ class _ArticleCardBody extends StatelessWidget {
           // publisher directly under the bite.
           LinkOutCue(article: article),
           const SizedBox(height: _kGapCueSource),
-          SourceMark(article: article),
+          // The tag belongs on THIS row specifically. The source mark is what
+          // tells the reader whose story this is; putting the disclosure
+          // anywhere else leaves the publisher's name to be read as the author
+          // of the words above it. Costs no vertical budget — it is shorter
+          // than the lettermark that sets _kSourceHeight.
+          Row(
+            children: [
+              Expanded(child: SourceMark(article: article)),
+              if (hasSummary) ...[
+                const SizedBox(width: 8),
+                const AiSummaryTag(),
+              ],
+            ],
+          ),
         ],
       ),
     );
