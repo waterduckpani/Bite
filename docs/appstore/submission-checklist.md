@@ -56,8 +56,18 @@ and every compliance item below is either done or a SQL statement away.
 - [x] **Migration 0027** (account deletion RPC) — applied 22 Aug.
 - [x] **Migration 0028** (budget counts completions) — applied 22 Aug. Note the
       correction at the top of that file: it was written on a mistaken
-      diagnosis and is kept on narrower merits. The backlog drains at 25/tick
-      either way.
+      diagnosis and is kept on narrower merits. It does work exactly as
+      specified: from the moment it zeroed the counter, the worker wrote
+      precisely 600 summaries and the 17:35 run stopped after 4, with nothing
+      until midnight. `summaries_done` now counts bites, and the ceiling binds
+      at its stated value.
+- [x] **Migration 0029** (attribution enforced in the schema) — applied 22 Aug.
+      Verified: zero rows with a blank `original_url` or `source_name`, and the
+      migration's own guard would have refused to run had there been any.
+- [x] **Summary backlog drained** — the 696 rows 0025 re-queued are through.
+      `failed` 0, `pending` 0, and the un-summarised pool is down to ~25, which
+      is just the normal gap between an ingest tick and the summarise tick
+      after it.
 - [x] **Verify deletion end-to-end** — done 22 Aug against the live project
       with a throwaway anonymous account: user created, a save written
       (1 row), `rpc/delete_account` returned 204, user afterwards 403, saves
